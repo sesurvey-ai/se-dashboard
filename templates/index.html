@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SE Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #0f172a; color: #e2e8f0;
+            display: flex; height: 100vh; overflow: hidden;
+        }
+
+        /* Main */
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Toolbar toggle (chevron, inline next to DASHBOARD) */
+        .toolbar-toggle-btn {
+            width: clamp(30px, 2.6vw, 42px); height: clamp(30px, 2.6vw, 42px);
+            padding: 0; background: transparent; border: none; color: #94a3b8;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: color 0.15s, transform 0.3s ease;
+        }
+        .toolbar-toggle-btn:hover { color: #3b82f6; }
+        .toolbar-toggle-btn svg { width: clamp(22px, 2vw, 32px); height: clamp(22px, 2vw, 32px); }
+        .toolbar-toggle-btn.collapsed { transform: rotate(180deg); }
+        body.light .toolbar-toggle-btn { color: #64748b; }
+        body.light .toolbar-toggle-btn:hover { color: #3b82f6; }
+
+        /* Toolbar */
+        .toolbar {
+            padding: clamp(8px, 1.2vw, 16px) clamp(12px, 1.8vw, 24px) clamp(8px, 1.2vw, 16px) 60px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex; align-items: center; gap: clamp(6px, 1vw, 16px); flex-wrap: wrap;
+        }
+        .toolbar.hidden { display: none; }
+        .toolbar input[type=date] {
+            padding: clamp(4px, 0.5vw, 7px) clamp(6px, 0.8vw, 12px); border: 1px solid #475569; border-radius: 8px;
+            background: #0f172a; color: #e2e8f0; font-size: clamp(11px, 1vw, 13px);
+        }
+        .toolbar input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+        .toolbar input[type=date].locked { opacity: 0.55; pointer-events: none; }
+        .toolbar-label { font-size: clamp(10px, 0.9vw, 12px); color: #64748b; font-weight: 600; text-transform: uppercase; }
+        .toolbar-group { display: flex; align-items: center; gap: 8px; }
+        .today-chk {
+            display: flex; align-items: center; gap: 4px;
+            font-size: clamp(10px, 0.9vw, 12px); color: #94a3b8;
+            cursor: pointer; white-space: nowrap; user-select: none;
+        }
+        .today-chk input { accent-color: #3b82f6; cursor: pointer; width: 14px; height: 14px; }
+        body.light .today-chk { color: #64748b; }
+
+        /* Radio pills */
+        .pill-group { display: flex; gap: 0; }
+        .pill-group input { display: none; }
+        .pill-group label {
+            padding: clamp(4px, 0.5vw, 7px) clamp(8px, 1vw, 16px); font-size: clamp(11px, 1vw, 13px); cursor: pointer;
+            background: #0f172a; border: 1px solid #475569; color: #94a3b8;
+            transition: all 0.15s; white-space: nowrap;
+        }
+        .pill-group label:first-of-type { border-radius: 8px 0 0 8px; }
+        .pill-group label:last-of-type { border-radius: 0 8px 8px 0; border-left: none; }
+        .pill-group input:checked + label {
+            background: #3b82f6; border-color: #3b82f6; color: #fff;
+        }
+
+        /* Fetch button */
+        .btn-fetch {
+            padding: clamp(4px, 0.5vw, 7px) clamp(14px, 1.8vw, 28px); background: #3b82f6; color: #fff; border: none;
+            border-radius: 8px; font-size: clamp(11px, 1vw, 13px); font-weight: 600; cursor: pointer;
+            transition: background 0.15s; white-space: nowrap;
+        }
+        .btn-fetch:hover { background: #2563eb; }
+        .btn-fetch:disabled { background: #1e3a5f; color: #64748b; cursor: not-allowed; }
+
+        /* Progress bar */
+        .progress-container {
+            display: none; align-items: center; gap: 12px; margin-bottom: 12px;
+        }
+        .progress-container.active { display: flex; }
+        .progress-bar-wrap {
+            flex: 1; height: 8px; background: #334155; border-radius: 4px; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; width: 0%; background: #3b82f6; border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .progress-text { font-size: 12px; color: #94a3b8; min-width: 180px; }
+        .btn-cancel {
+            padding: 5px 16px; background: #dc2626; color: #fff; border: none;
+            border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap;
+        }
+        .btn-cancel:hover { background: #b91c1c; }
+
+        /* Content area */
+        .content { flex: 1; overflow: auto; padding: 16px 24px; display: flex; flex-direction: column; }
+        #status { margin-bottom: 12px; font-size: 13px; color: #94a3b8; }
+        #status.error { color: #f87171; }
+
+        /* Dashboard */
+        #dashboardView {
+            flex: 1; min-height: 0;
+            display: flex; flex-direction: column;
+            overflow: auto;
+        }
+        .dash-cards {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px; margin-bottom: clamp(20px, 2.5vw, 36px);
+            flex-shrink: 0;
+        }
+        .dash-card {
+            background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+            padding: 16px 20px; display: flex; align-items: center; gap: 12px;
+            border-left: 5px solid; overflow: hidden;
+        }
+        .dash-card.blue { border-left-color: #3b82f6; }
+        .dash-card.green { border-left-color: #22c55e; }
+        .dash-card.amber { border-left-color: #f59e0b; }
+        .dash-card.rose { border-left-color: #f43f5e; }
+        .dash-card .card-icon {
+            width: clamp(36px, 3vw, 56px); height: clamp(36px, 3vw, 56px); border-radius: 12px; display: flex;
+            align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .dash-card .card-icon svg { width: clamp(20px, 2vw, 32px); height: clamp(20px, 2vw, 32px); }
+        .dash-card.blue .card-icon { background: rgba(59,130,246,0.15); color: #3b82f6; }
+        .dash-card.green .card-icon { background: rgba(34,197,94,0.15); color: #22c55e; }
+        .dash-card.amber .card-icon { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .dash-card.rose .card-icon { background: rgba(244,63,94,0.15); color: #f43f5e; }
+        .dash-card .card-value { font-size: clamp(18px, 2.2vw, 40px); font-weight: 800; color: #f1f5f9; line-height: 1; margin-left: auto; white-space: nowrap; }
+        .dash-card .card-label { font-size: clamp(18px, 2.2vw, 40px); font-weight: 600; color: #94a3b8; white-space: nowrap; }
+
+        .dash-charts {
+            display: grid; grid-template-columns: 1fr 1fr;
+            grid-template-rows: repeat(3, 1fr);
+            gap: 8px;
+            flex: 1; min-height: 0;
+        }
+        .chart-card {
+            background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+            padding: 8px 12px 4px;
+            display: flex; flex-direction: column;
+            min-height: 0;
+        }
+        .chart-card h4 {
+            font-size: 11px; color: #94a3b8; margin-bottom: 4px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.3px;
+            flex-shrink: 0;
+        }
+        .chart-card .chart-wrap { position: relative; flex: 1; min-height: 0; }
+
+        /* Inspector Cards */
+        .inspector-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+            gap: 12px; padding: 4px 0;
+        }
+        .inspector-card {
+            background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+            padding: 18px 22px; display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; transition: border-color 0.15s;
+        }
+        .inspector-card:hover { border-color: #3b82f6; }
+        .inspector-name {
+            font-size: 13px; font-weight: 600; color: #e2e8f0;
+            white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word;
+        }
+        .inspector-badge {
+            background: #3b82f6; color: #fff; font-size: 13px; font-weight: 700;
+            padding: 2px 10px; border-radius: 20px; flex-shrink: 0;
+        }
+        .inspector-progress {
+            width: 100%; height: 8px; background: #334155; border-radius: 999px; overflow: hidden;
+        }
+        .inspector-progress-fill {
+            height: 100%; background: linear-gradient(90deg, #22c55e, #3b82f6);
+            border-radius: 999px; transition: width 0.4s ease;
+        }
+        body.light .inspector-card { background: #fff; border-color: #e2e8f0; }
+        body.light .inspector-card:hover { border-color: #3b82f6; }
+        body.light .inspector-name { color: #1e293b; }
+        body.light .inspector-progress { background: #e2e8f0; }
+
+        /* Theme & Font controls */
+        .toolbar-controls {
+            display: flex; align-items: center; gap: 6px; margin-left: auto;
+        }
+        .toolbar-controls button {
+            background: none; border: 1px solid #475569; color: #94a3b8;
+            border-radius: 6px; width: clamp(26px, 2.2vw, 32px); height: clamp(26px, 2.2vw, 32px); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; transition: all 0.15s;
+        }
+        .toolbar-controls button:hover { background: #334155; color: #e2e8f0; }
+
+        /* Light theme */
+        body.light { background: #f1f5f9; color: #1e293b; }
+        body.light .toolbar { background: #fff; border-bottom-color: #e2e8f0; }
+        body.light .toolbar h1 { color: #0f172a; }
+        body.light .toolbar input[type=date] { background: #f8fafc; border-color: #cbd5e1; color: #1e293b; }
+        body.light .toolbar input[type=date]::-webkit-calendar-picker-indicator { filter: none; }
+        body.light .toolbar-label { color: #94a3b8; }
+        body.light .toolbar-controls button { border-color: #cbd5e1; color: #64748b; }
+        body.light .toolbar-controls button:hover { background: #f1f5f9; color: #1e293b; }
+        body.light .pill-group label { background: #f8fafc; border-color: #cbd5e1; color: #64748b; }
+        body.light .pill-group input:checked + label { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+        body.light .content { background: #f1f5f9; }
+        body.light #status { color: #64748b; }
+        body.light #dashHeader span:first-child { color: #0f172a; }
+        body.light #dashClock { color: #64748b; }
+        body.light .dash-card { background: #fff; border-color: #e2e8f0; }
+        body.light .dash-card .card-value { color: #0f172a; }
+        body.light .dash-card .card-label { color: #94a3b8; }
+        body.light .chart-card { background: #fff; border-color: #e2e8f0; }
+        body.light .chart-card h4 { color: #64748b; }
+        body.light .progress-bar-wrap { background: #e2e8f0; }
+        body.light .progress-text { color: #64748b; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .toolbar { padding: 8px 12px; gap: 6px 8px; }
+            .toolbar h1 { font-size: 14px; margin-right: auto; }
+            .toolbar-group { width: 100%; order: 1; }
+            .toolbar-group .toolbar-label { display: none; }
+            .toolbar input[type=date] { flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px; }
+            .pill-group label { padding: 6px 10px; font-size: 11px; }
+            .toolbar form { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; order: 2; }
+            .toolbar form .pill-group { flex: 1; }
+            .toolbar form .pill-group label { flex: 1; text-align: center; }
+            .btn-fetch { flex: none; padding: 6px 16px; font-size: 12px; order: 3; }
+            #autoRefreshLabel { font-size: 11px; margin-left: 0; order: 5; }
+            .toolbar-controls { margin-left: auto; order: 6; }
+            .toolbar-controls button { width: 28px; height: 28px; }
+            .content { padding: 12px 16px; }
+            #dashboardView { flex: none; }
+            .dash-charts {
+                grid-template-columns: 1fr;
+                grid-template-rows: none;
+                flex: none;
+            }
+            .chart-card .chart-wrap { flex: none; height: 220px; }
+            .dash-cards { grid-template-columns: 1fr; }
+            .dash-card { padding: 14px 16px; }
+            .dash-card .card-icon { width: 40px; height: 40px; }
+            .dash-card .card-icon svg { width: 22px; height: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div class="toolbar" id="toolbar">
+            <form id="reportForm" style="display:contents;">
+                <div class="toolbar-group">
+                    <span class="toolbar-label">From</span>
+                    <input type="date" id="date_from" name="date_from" required>
+                    <label class="today-chk"><input type="checkbox" id="from_today"> Today</label>
+                </div>
+                <div class="toolbar-group">
+                    <span class="toolbar-label">To</span>
+                    <input type="date" id="date_to" name="date_to" required>
+                    <label class="today-chk"><input type="checkbox" id="to_today"> Today</label>
+                </div>
+                <div class="pill-group" style="display:none;">
+                    <input type="radio" name="report_type" value="enquiry" id="rt_enquiry" checked>
+                    <label for="rt_enquiry">Enquiry</label>
+                    <input type="radio" name="report_type" value="closeClaim" id="rt_close">
+                    <label for="rt_close">Close Claim</label>
+                    <input type="radio" name="report_type" value="claim" id="rt_claim">
+                    <label for="rt_claim">Claim Report</label>
+                </div>
+                <button type="submit" class="btn-fetch" id="submitBtn">Fetch</button>
+            </form>
+            <label id="autoRefreshLabel" style="display:flex; align-items:center; gap:4px; font-size:clamp(10px, 0.9vw, 12px); color:#94a3b8; cursor:pointer; margin-left:4px; user-select:none; white-space:nowrap;">
+                <input type="checkbox" id="autoRefresh" style="accent-color:#3b82f6; width:15px; height:15px; cursor:pointer;">
+                Auto Refresh
+            </label>
+            <div class="toolbar-controls">
+                <button id="themeToggle" title="สลับธีม">
+                    <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="status"></div>
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" id="progressFill"></div>
+                </div>
+                <span class="progress-text" id="progressText">Connecting...</span>
+                <button class="btn-cancel" id="cancelBtn">Cancel</button>
+            </div>
+
+            <div id="dashboardView">
+                <div id="dashHeader" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-shrink:0;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button class="toolbar-toggle-btn" id="toolbarToggle" title="ซ่อน/แสดงแถบเครื่องมือ">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="18 15 12 9 6 15"/>
+                            </svg>
+                        </button>
+                        <span style="font-size:clamp(18px, 2.2vw, 30px); font-weight:800; color:#f1f5f9; letter-spacing:1px;">DASHBOARD</span>
+                    </div>
+                    <span id="dashRange" style="font-size:clamp(18px, 2.2vw, 30px); font-weight:700; color:#64748b; font-variant-numeric:tabular-nums;"></span>
+                    <span id="dashClock" style="font-size:clamp(18px, 2.2vw, 30px); font-weight:700; color:#94a3b8; font-variant-numeric:tabular-nums;"></span>
+                </div>
+                <div class="dash-cards" id="dashCards"></div>
+                <div id="inspectorCards"></div>
+                <div class="dash-charts" id="dashCharts"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const COLUMN_MAP = {{ column_map | tojson }};
+        const STAFF_SUPERVISOR = {{ staff_supervisor_map | tojson }};
+
+        const form = document.getElementById('reportForm');
+        const status = document.getElementById('status');
+        const btn = document.getElementById('submitBtn');
+
+        const todayStr = () => new Date().toISOString().slice(0, 10);
+        document.getElementById('date_from').value = todayStr();
+        document.getElementById('date_to').value = todayStr();
+
+        // ========== TODAY LOCK CHECKBOXES ==========
+        function setupTodayLock(chkId, dateId) {
+            const chk = document.getElementById(chkId);
+            const inp = document.getElementById(dateId);
+            chk.addEventListener('change', () => {
+                if (chk.checked) {
+                    inp.value = todayStr();
+                    inp.classList.add('locked');
+                } else {
+                    inp.classList.remove('locked');
+                }
+            });
+        }
+        setupTodayLock('from_today', 'date_from');
+        setupTodayLock('to_today', 'date_to');
+
+        let lastRecords = null;
+
+        // ========== THEME TOGGLE ==========
+        const MOON_SVG = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>';
+        const SUN_SVG = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+        const themeIcon = document.getElementById('themeIcon');
+
+        function applyTheme(theme) {
+            document.body.classList.toggle('light', theme === 'light');
+            themeIcon.innerHTML = theme === 'light' ? MOON_SVG : SUN_SVG;
+            localStorage.setItem('se_theme', theme);
+        }
+        applyTheme(localStorage.getItem('se_theme') || 'dark');
+
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            applyTheme(document.body.classList.contains('light') ? 'dark' : 'light');
+            if (lastRecords) buildDashboard();
+        });
+
+        // ========== TOOLBAR TOGGLE ==========
+        document.getElementById('toolbarToggle').addEventListener('click', (e) => {
+            document.getElementById('toolbar').classList.toggle('hidden');
+            e.currentTarget.classList.toggle('collapsed');
+        });
+
+        // Reset when report type changes
+        document.querySelectorAll('input[name=report_type]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                status.textContent = '';
+                lastRecords = null;
+                document.getElementById('dashCards').innerHTML = '';
+                document.getElementById('dashCharts').innerHTML = '';
+                document.getElementById('inspectorCards').innerHTML = '';
+                destroyCharts();
+            });
+        });
+
+        // ========== AUTO REFRESH ==========
+        let autoRefreshTimer = null;
+        const autoRefreshCb = document.getElementById('autoRefresh');
+        autoRefreshCb.addEventListener('change', () => {
+            if (autoRefreshCb.checked) {
+                autoRefreshTimer = setInterval(() => {
+                    if (btn.disabled) return;
+                    const t = todayStr();
+                    if (document.getElementById('from_today').checked) {
+                        document.getElementById('date_from').value = t;
+                    }
+                    if (document.getElementById('to_today').checked) {
+                        document.getElementById('date_to').value = t;
+                    }
+                    form.requestSubmit();
+                }, 5 * 60 * 1000);
+            } else {
+                if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+            }
+        });
+
+        // ========== DASHBOARD CLOCK + RANGE ==========
+        function fmtThDate(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            if (isNaN(d)) return '';
+            return d.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        }
+        function startDashClock() {
+            const clockEl = document.getElementById('dashClock');
+            const rangeEl = document.getElementById('dashRange');
+            if (!clockEl) return;
+            function tick() {
+                const now = new Date();
+                clockEl.textContent = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                const from = document.getElementById('date_from').value;
+                const to = document.getElementById('date_to').value;
+                rangeEl.textContent = (from && to) ? `${fmtThDate(from)}  →  ${fmtThDate(to)}` : '';
+            }
+            tick();
+            setInterval(tick, 1000);
+        }
+        startDashClock();
+
+        // ========== DASHBOARD ==========
+        const COLORS = ['#3b82f6','#22c55e','#f59e0b','#f43f5e','#a855f7','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
+        let chartInstances = [];
+
+        if (window.Chart && window.ChartDataLabels) {
+            Chart.register(window.ChartDataLabels);
+            Chart.defaults.set('plugins.datalabels', { display: false });
+        }
+
+        const CARD_ICONS = {
+            total: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>',
+            completed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+            pending: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+            time: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>',
+            sent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+        };
+
+        function getDashFilteredRecords() {
+            if (!lastRecords) return [];
+            return lastRecords.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
+        }
+
+        function destroyCharts() { chartInstances.forEach(c => c.destroy()); chartInstances = []; }
+
+        function avgTravelTime(records) {
+            let total = 0, count = 0;
+            records.forEach(r => {
+                const t = r.travel_time; if (!t) return;
+                const p = String(t).split(':');
+                if (p.length === 2) { total += parseInt(p[0]) * 60 + parseInt(p[1]); count++; }
+            });
+            if (!count) return '-';
+            const avg = Math.round(total / count), h = Math.floor(avg / 60), m = avg % 60;
+            return h > 0 ? `${h}h ${m}m` : `${m}m`;
+        }
+
+        function sumNumeric(records, key) {
+            let total = 0;
+            records.forEach(r => {
+                const v = parseFloat(r[key]);
+                if (!isNaN(v)) total += v;
+            });
+            return total;
+        }
+
+        function fmtMoney(n) {
+            if (!n) return '0';
+            if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+            return Math.round(n).toLocaleString();
+        }
+
+        function addCard(container, value, label, color, icon) {
+            const card = document.createElement('div');
+            card.className = `dash-card ${color}`;
+            card.innerHTML = `<div class="card-icon">${CARD_ICONS[icon] || CARD_ICONS.total}</div><span class="card-label">${label}</span><span class="card-value">${value} &nbsp; เรื่อง</span>`;
+            container.appendChild(card);
+        }
+
+        function buildDashboard() {
+            if (!lastRecords || lastRecords.length === 0) return;
+            destroyCharts();
+            const cards = document.getElementById('dashCards');
+            const charts = document.getElementById('dashCharts');
+            cards.innerHTML = ''; charts.innerHTML = '';
+
+            const rt = document.querySelector('input[name=report_type]:checked').value;
+            const records = getDashFilteredRecords();
+
+            if (rt === 'enquiry') {
+                const completed = records.filter(r => String(r.stt_desc || '').trim() === 'จบงาน').length;
+                const pending = records.length - completed;
+                addCard(cards, records.length, 'Total Claims', 'blue', 'total');
+                addCard(cards, completed, 'Completed', 'green', 'completed');
+                addCard(cards, pending, 'Pending', 'amber', 'time');
+            } else if (rt === 'claim') {
+                const closed = records.filter(r => r.close_dt && String(r.close_dt).trim()).length;
+                const totalCost = sumNumeric(records, 'D_TOTAL_COST');
+                const avgCost = records.length ? totalCost / records.length : 0;
+                addCard(cards, records.length, 'Total Claims', 'blue', 'total');
+                addCard(cards, fmtMoney(totalCost), 'Total Cost (฿)', 'green', 'completed');
+                addCard(cards, fmtMoney(avgCost), 'Avg Cost (฿)', 'amber', 'pending');
+                addCard(cards, closed, 'Closed Cases', 'rose', 'sent');
+            } else {
+                const sent = records.filter(r => r.sendReport_dt && String(r.sendReport_dt).trim()).length;
+                addCard(cards, records.length, 'Total Closed', 'blue', 'total');
+                addCard(cards, avgTravelTime(records), 'Avg Travel Time', 'green', 'time');
+                addCard(cards, sent, 'Reports Sent', 'amber', 'sent');
+            }
+
+            // Inspector cards
+            const inspectorContainer = document.getElementById('inspectorCards');
+            inspectorContainer.innerHTML = '';
+            const inspectorKey = rt === 'claim' ? 'empName' : rt === 'closeClaim' ? 'empname' : 'checkByName';
+            const staffKey = rt === 'claim' ? 'empName' : 'empcode';
+
+            const stripTitle = (s) => String(s || '').replace(/^(นางสาว|น\.ส\.|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '').trim();
+
+            const groups = {};
+            records.forEach(r => {
+                const sup = stripTitle(r[inspectorKey]) || '(ว่าง)';
+                if (!groups[sup]) groups[sup] = [];
+                groups[sup].push(r);
+            });
+
+            const sorted = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+
+            const grid = document.createElement('div');
+            grid.className = 'inspector-grid';
+
+            sorted.forEach(([name, recs]) => {
+                const card = document.createElement('div');
+                card.className = 'inspector-card';
+                card.style.flexDirection = 'column';
+                card.style.alignItems = 'stretch';
+                card.style.gap = '6px';
+
+                if (name === '(ว่าง)') {
+                    const staffCounts = {};
+                    recs.forEach(r => {
+                        const s = stripTitle(r[staffKey]) || '(ไม่ระบุ)';
+                        staffCounts[s] = (staffCounts[s] || 0) + 1;
+                    });
+                    const staffSorted = Object.entries(staffCounts).sort((a, b) => b[1] - a[1]);
+                    let html = `<div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="inspector-name" style="font-size:24px; font-weight:700; color:#f59e0b;">(ว่าง)</span>
+                        <span class="inspector-badge" style="background:#f59e0b; font-size:18px; padding:4px 14px;">${recs.length}</span>
+                    </div>`;
+                    html += `<div style="border-top:1px solid #334155; padding-top:10px; display:flex; flex-direction:column; gap:6px;">`;
+                    staffSorted.forEach(([staff, cnt]) => {
+                        html += `<div style="display:flex; justify-content:space-between; font-size:18px; color:#94a3b8;">
+                            <span title="${staff}">${staff}</span>
+                            <span style="flex-shrink:0; margin-left:8px; color:#e2e8f0;"><b>${cnt}</b></span>
+                        </div>`;
+                    });
+                    html += `</div>`;
+                    card.innerHTML = html;
+                } else {
+                    const total = recs.length;
+                    const completed = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน').length;
+                    const pending = total - completed;
+
+                    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                    card.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <span class="inspector-name" style="font-size:24px; font-weight:700;" title="${name}">${name}</span>
+                        <span style="font-size:16px; font-weight:700; color:#22c55e;">${pct}%</span>
+                    </div>
+                    <div class="inspector-progress"><div class="inspector-progress-fill" style="width:${pct}%;"></div></div>
+                    <div style="display:flex; flex-direction:column; gap:6px; font-size:18px; border-top:1px solid #334155; padding-top:10px;">
+                        <div style="display:flex; justify-content:space-between; color:#3b82f6;"><span>Total Claims</span><b>${total}</b></div>
+                        <div style="display:flex; justify-content:space-between; color:#22c55e;"><span>Completed</span><b>${completed}</b></div>
+                        <div style="display:flex; justify-content:space-between; color:#f59e0b;"><span>Pending</span><b>${pending}</b></div>
+                    </div>`;
+                }
+
+                grid.appendChild(card);
+            });
+
+            inspectorContainer.appendChild(grid);
+
+            status.style.display = 'none';
+        }
+
+        // ========== DEDUPLICATION ==========
+        function fillSupervisor(records) {
+            records.forEach(r => {
+                const sn = String(r.survey_no || '').trim().toUpperCase();
+
+                if (sn.startsWith('SEMS') || sn.startsWith('SETP')) {
+                    r.checkByName = 'นายสราวุธ บุญคุ้ม';
+                    return;
+                }
+
+                if (r.checkByName && String(r.checkByName).trim()) return;
+
+                if (!STAFF_SUPERVISOR || Object.keys(STAFF_SUPERVISOR).length === 0) return;
+                const staff = r.empcode && String(r.empcode).trim();
+                if (!staff) return;
+                if (STAFF_SUPERVISOR[staff]) {
+                    r.checkByName = STAFF_SUPERVISOR[staff];
+                    return;
+                }
+                for (const key in STAFF_SUPERVISOR) {
+                    if (staff.includes(key) || key.includes(staff)) {
+                        r.checkByName = STAFF_SUPERVISOR[key];
+                        return;
+                    }
+                }
+            });
+        }
+
+        function deduplicateRecords(records) {
+            function getKey(r) {
+                const s = r.survey_no && String(r.survey_no).trim();
+                if (s) return 'S:' + s;
+                const n = r.notify_no && String(r.notify_no).trim();
+                if (n) return 'N:' + n;
+                const c = r.claim_no && String(r.claim_no).trim();
+                if (c) return 'C:' + c;
+                return null;
+            }
+            function filledCount(r) {
+                let count = 0;
+                for (const k in r) {
+                    const v = r[k];
+                    if (v != null && String(v).trim() !== '') count++;
+                }
+                return count;
+            }
+            const groups = {};
+            const noKey = [];
+            records.forEach(r => {
+                const key = getKey(r);
+                if (!key) { noKey.push(r); return; }
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(r);
+            });
+            const result = [];
+            for (const key in groups) {
+                const arr = groups[key];
+                if (arr.length === 1) { result.push(arr[0]); continue; }
+                let best = arr[0], bestCount = filledCount(arr[0]);
+                for (let i = 1; i < arr.length; i++) {
+                    const c = filledCount(arr[i]);
+                    if (c > bestCount) { best = arr[i]; bestCount = c; }
+                }
+                result.push(best);
+            }
+            return result.concat(noKey);
+        }
+
+        // ========== FORM SUBMIT (SSE STREAMING) ==========
+        let abortController = null;
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            if (abortController) abortController.abort();
+        });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            status.className = '';
+            status.textContent = '';
+            status.style.display = '';
+            btn.disabled = true;
+            lastRecords = null;
+
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Connecting...';
+            progressContainer.classList.add('active');
+
+            abortController = new AbortController();
+            const formData = new FormData(this);
+
+            try {
+                const res = await fetch('/fetch-stream', {
+                    method: 'POST',
+                    body: formData,
+                    signal: abortController.signal,
+                });
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const parts = buffer.split('\n\n');
+                    buffer = parts.pop();
+
+                    for (const part of parts) {
+                        if (!part.trim()) continue;
+                        let eventType = null, dataStr = null;
+                        for (const line of part.split('\n')) {
+                            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+                            else if (line.startsWith('data: ')) dataStr = line.slice(6);
+                        }
+                        if (!eventType || !dataStr) continue;
+                        const payload = JSON.parse(dataStr);
+
+                        if (eventType === 'progress') {
+                            const pct = payload.total > 0 ? Math.round((payload.fetched / payload.total) * 100) : 0;
+                            progressFill.style.width = pct + '%';
+                            progressText.textContent = `Page ${payload.page} — ${payload.fetched.toLocaleString()}/${payload.total.toLocaleString()} records (${pct}%)`;
+                        } else if (eventType === 'error') {
+                            throw new Error(payload.error);
+                        } else if (eventType === 'done') {
+                            const raw = payload.data;
+                            if (!raw || raw.length === 0) {
+                                status.textContent = 'No data found.';
+                            } else {
+                                const records = deduplicateRecords(raw);
+                                fillSupervisor(records);
+                                lastRecords = records;
+                                buildDashboard();
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    status.textContent = 'Fetch cancelled.';
+                } else {
+                    status.className = 'error';
+                    status.textContent = 'Error: ' + err.message;
+                }
+            } finally {
+                btn.disabled = false;
+                progressContainer.classList.remove('active');
+                abortController = null;
+            }
+        });
+    </script>
+</body>
+</html>
