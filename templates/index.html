@@ -195,6 +195,13 @@
             font-size: 14px; transition: all 0.15s;
         }
         .toolbar-controls button:hover { background: #334155; color: #e2e8f0; }
+        .toolbar-controls select {
+            background: #0f172a; color: #e2e8f0; border: 1px solid #475569;
+            border-radius: 6px; padding: 4px 8px; font-size: clamp(11px, 1vw, 13px);
+            cursor: pointer; height: clamp(26px, 2.2vw, 32px);
+        }
+        .toolbar-controls select:hover { border-color: #3b82f6; }
+        body.light .toolbar-controls select { background: #f8fafc; color: #1e293b; border-color: #cbd5e1; }
 
         /* Light theme */
         body.light { background: #f1f5f9; color: #1e293b; }
@@ -209,9 +216,10 @@
         body.light .pill-group input:checked + label { background: #3b82f6; border-color: #3b82f6; color: #fff; }
         body.light .content { background: #f1f5f9; }
         body.light #status { color: #64748b; }
-        body.light #dashHeader span:first-child { color: #0f172a; }
+        #dashTitle { color: #f1f5f9; }
+        body.light #dashTitle { color: #0f172a; }
         body.light #dashClock { color: #64748b; }
-        body.light .dash-card { background: #fff; border-color: #e2e8f0; }
+        body.light .dash-card { background: #fff; border-top-color: #e2e8f0; border-right-color: #e2e8f0; border-bottom-color: #e2e8f0; }
         body.light .dash-card .card-value { color: #0f172a; }
         body.light .dash-card .card-label { color: #94a3b8; }
         body.light .chart-card { background: #fff; border-color: #e2e8f0; }
@@ -278,6 +286,16 @@
                 Auto Refresh
             </label>
             <div class="toolbar-controls">
+                <select id="sortMode" title="เรียงการ์ดตาม">
+                    <option value="total">จำนวนเคส (มาก→น้อย)</option>
+                    <option value="completed">จบงาน (มาก→น้อย)</option>
+                    <option value="pending">ค้าง (มาก→น้อย)</option>
+                    <option value="pct">% จบงาน (มาก→น้อย)</option>
+                    <option value="name">ชื่อ (ก→ฮ)</option>
+                    <option value="score">คะแนนรวม (จบ × %)</option>
+                    <option value="dispatch_speed">จบงานเร็วที่สุด (วันจ่าย)</option>
+                    <option value="report_speed">จบงานเร็วที่สุด (วันส่งงาน)</option>
+                </select>
                 <button id="themeToggle" title="สลับธีม">
                     <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                         <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -304,7 +322,7 @@
                                 <polyline points="18 15 12 9 6 15"/>
                             </svg>
                         </button>
-                        <span style="font-size:clamp(18px, 2.2vw, 30px); font-weight:800; color:#f1f5f9; letter-spacing:1px;">DASHBOARD</span>
+                        <span id="dashTitle" style="font-size:clamp(18px, 2.2vw, 30px); font-weight:800; letter-spacing:1px;">DASHBOARD</span>
                     </div>
                     <span id="dashRange" style="font-size:clamp(18px, 2.2vw, 30px); font-weight:700; color:#64748b; font-variant-numeric:tabular-nums;"></span>
                     <span id="dashClock" style="font-size:clamp(18px, 2.2vw, 30px); font-weight:700; color:#94a3b8; font-variant-numeric:tabular-nums;"></span>
@@ -360,6 +378,16 @@
 
         document.getElementById('themeToggle').addEventListener('click', () => {
             applyTheme(document.body.classList.contains('light') ? 'dark' : 'light');
+            if (lastRecords) buildDashboard();
+        });
+
+        // ========== SORT MODE ==========
+        const sortSelect = document.getElementById('sortMode');
+        const storedSort = localStorage.getItem('se_sort');
+        const validSorts = ['total', 'completed', 'pending', 'pct', 'name', 'score', 'dispatch_speed', 'report_speed'];
+        sortSelect.value = validSorts.includes(storedSort) ? storedSort : 'total';
+        sortSelect.addEventListener('change', () => {
+            localStorage.setItem('se_sort', sortSelect.value);
             if (lastRecords) buildDashboard();
         });
 
@@ -530,7 +558,72 @@
                 groups[sup].push(r);
             });
 
-            const sorted = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+            const sortMode = document.getElementById('sortMode').value;
+            const parseDT = (s) => {
+                if (!s) return null;
+                const str = String(s).trim();
+                if (!str) return null;
+                const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+                if (m) {
+                    let [, d, mo, y, h, mi, se] = m;
+                    y = parseInt(y, 10);
+                    if (y > 2400) y -= 543;
+                    const dt = new Date(y, parseInt(mo, 10) - 1, parseInt(d, 10),
+                        h ? parseInt(h, 10) : 0, mi ? parseInt(mi, 10) : 0, se ? parseInt(se, 10) : 0);
+                    return isNaN(dt) ? null : dt.getTime();
+                }
+                const iso = Date.parse(str);
+                return isNaN(iso) ? null : iso;
+            };
+            const avgDuration = (recs, startKey, endKey) => {
+                let total = 0, count = 0;
+                recs.forEach(r => {
+                    const a = parseDT(r[startKey]);
+                    const b = parseDT(r[endKey]);
+                    if (a !== null && b !== null && b > a) {
+                        total += (b - a);
+                        count++;
+                    }
+                });
+                return count > 0 ? total / count : Infinity;
+            };
+            const statsOf = (recs) => {
+                const total = recs.length;
+                const completed = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน').length;
+                return {
+                    total, completed, pending: total - completed,
+                    pct: total > 0 ? (completed / total) * 100 : 0,
+                    dispatchSpeed: avgDuration(recs, 'dispatch_dt', 'checker_dt'),
+                    reportSpeed: avgDuration(recs, 'sendReport_dt', 'checker_dt'),
+                };
+            };
+            const statsMap = new Map();
+            Object.entries(groups).forEach(([name, recs]) => statsMap.set(name, statsOf(recs)));
+
+            const comparators = {
+                total: (a, b) => statsMap.get(b[0]).total - statsMap.get(a[0]).total,
+                completed: (a, b) => statsMap.get(b[0]).completed - statsMap.get(a[0]).completed,
+                pending: (a, b) => statsMap.get(b[0]).pending - statsMap.get(a[0]).pending,
+                pct: (a, b) => statsMap.get(b[0]).pct - statsMap.get(a[0]).pct,
+                name: (a, b) => a[0].localeCompare(b[0], 'th'),
+                score: (a, b) => {
+                    const sa = statsMap.get(a[0]), sb = statsMap.get(b[0]);
+                    return (sb.completed * sb.pct) - (sa.completed * sa.pct);
+                },
+                dispatch_speed: (a, b) => statsMap.get(a[0]).dispatchSpeed - statsMap.get(b[0]).dispatchSpeed,
+                report_speed: (a, b) => statsMap.get(a[0]).reportSpeed - statsMap.get(b[0]).reportSpeed,
+            };
+            const allEntries = Object.entries(groups);
+            const emptyEntry = allEntries.find(([name]) => name === '(ว่าง)');
+            const nonEmpty = allEntries.filter(([name]) => name !== '(ว่าง)');
+            nonEmpty.sort(comparators[sortMode] || comparators.total);
+            const sorted = emptyEntry ? [...nonEmpty, emptyEntry] : nonEmpty;
+
+            const MEDALS = ['🥇', '🥈', '🥉'];
+            const medalMap = new Map();
+            for (let idx = 0; idx < Math.min(3, nonEmpty.length); idx++) {
+                medalMap.set(nonEmpty[idx][0], MEDALS[idx]);
+            }
 
             const grid = document.createElement('div');
             grid.className = 'inspector-grid';
@@ -550,8 +643,8 @@
                     });
                     const staffSorted = Object.entries(staffCounts).sort((a, b) => b[1] - a[1]);
                     let html = `<div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span class="inspector-name" style="font-size:24px; font-weight:700; color:#f59e0b;">(ว่าง)</span>
-                        <span class="inspector-badge" style="background:#f59e0b; font-size:18px; padding:4px 14px;">${recs.length}</span>
+                        <span class="inspector-name" style="font-size:24px; font-weight:700; color:#ef4444;">(ว่าง)</span>
+                        <span class="inspector-badge" style="background:#ef4444; font-size:18px; padding:4px 14px;">${recs.length}</span>
                     </div>`;
                     html += `<div style="border-top:1px solid #334155; padding-top:10px; display:flex; flex-direction:column; gap:6px;">`;
                     staffSorted.forEach(([staff, cnt]) => {
@@ -568,8 +661,10 @@
                     const pending = total - completed;
 
                     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                    const medal = medalMap.get(name);
+                    const displayName = medal ? `${medal} ${name}` : name;
                     card.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                        <span class="inspector-name" style="font-size:24px; font-weight:700;" title="${name}">${name}</span>
+                        <span class="inspector-name" style="font-size:24px; font-weight:700;" title="${name}">${displayName}</span>
                         <span style="font-size:16px; font-weight:700; color:#22c55e;">${pct}%</span>
                     </div>
                     <div class="inspector-progress"><div class="inspector-progress-fill" style="width:${pct}%;"></div></div>
