@@ -157,7 +157,9 @@
 
         /* Inspector Cards */
         .inspector-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+            align-items: start;
             gap: 12px; padding: 4px 0;
         }
         .inspector-card {
@@ -207,6 +209,56 @@
         @keyframes medal-pulse-silver-light {
             0%, 100% { box-shadow: 0 0 0 1px #64748b, 0 0 18px rgba(100, 116, 139, 0.45), 0 0 36px rgba(100, 116, 139, 0.2); }
             50% { box-shadow: 0 0 0 1px #64748b, 0 0 26px rgba(100, 116, 139, 0.65), 0 0 48px rgba(100, 116, 139, 0.3); }
+        }
+
+        /* Fireball running around the border */
+        @property --ang-gold   { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+        @property --ang-silver { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+        @property --ang-bronze { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+
+        .inspector-card.medal-gold,
+        .inspector-card.medal-silver,
+        .inspector-card.medal-bronze { position: relative; }
+
+        .inspector-card.medal-gold::after,
+        .inspector-card.medal-silver::after,
+        .inspector-card.medal-bronze::after {
+            content: '';
+            position: absolute; inset: -2px; border-radius: 14px;
+            padding: 2px; pointer-events: none;
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+            filter: drop-shadow(0 0 6px currentColor);
+        }
+        .inspector-card.medal-gold::after {
+            color: #fbbf24;
+            background: conic-gradient(from var(--ang-gold),
+                transparent 0deg 260deg, #fbbf24 300deg, #fff7cc 330deg, #fbbf24 360deg);
+            animation: fireball-gold 2.5s linear infinite;
+        }
+        .inspector-card.medal-silver::after {
+            color: #cbd5e1;
+            background: conic-gradient(from var(--ang-silver),
+                transparent 0deg 260deg, #cbd5e1 300deg, #ffffff 330deg, #cbd5e1 360deg);
+            animation: fireball-silver 2.5s linear infinite;
+        }
+        .inspector-card.medal-bronze::after {
+            color: #d97706;
+            background: conic-gradient(from var(--ang-bronze),
+                transparent 0deg 260deg, #d97706 300deg, #fcd34d 330deg, #d97706 360deg);
+            animation: fireball-bronze 2.5s linear infinite;
+        }
+        @keyframes fireball-gold   { to { --ang-gold: 360deg; } }
+        @keyframes fireball-silver { to { --ang-silver: 360deg; } }
+        @keyframes fireball-bronze { to { --ang-bronze: 360deg; } }
+
+        /* Light mode silver fireball — darker tone */
+        body.light .inspector-card.medal-silver::after {
+            color: #64748b;
+            background: conic-gradient(from var(--ang-silver),
+                transparent 0deg 260deg, #64748b 300deg, #cbd5e1 330deg, #64748b 360deg);
         }
         .inspector-name {
             font-size: 13px; font-weight: 600; color: #e2e8f0;
@@ -473,6 +525,76 @@
 
         let lastRecords = null;
 
+        // ========== SESSION CACHE (survive navigation to /page2 and back) ==========
+        const CACHE_KEY = 'se_cache';
+        // Only fields actually read by buildDashboard() + page2 charts — records arrive with ~49 fields,
+        // most unused at render time. Stripping keeps sessionStorage under ~5MB quota for large fetches.
+        const CACHE_FIELDS = [
+            'stt_desc', 'checkByName', 'empName', 'empname', 'empcode',
+            'dispatch_dt', 'sendReport_dt', 'checker_dt', 'close_dt',
+            'travel_time', 'D_TOTAL_COST',
+        ];
+        function slimRecord(r) {
+            const out = {};
+            for (const k of CACHE_FIELDS) {
+                const v = r[k];
+                if (v !== undefined && v !== null && v !== '') out[k] = v;
+            }
+            return out;
+        }
+        function saveCache(snapshot) {
+            if (!lastRecords) return;
+            const payload = {
+                records: lastRecords.map(slimRecord),
+                date_from: snapshot?.date_from ?? document.getElementById('date_from').value,
+                date_to: snapshot?.date_to ?? document.getElementById('date_to').value,
+                report_type: snapshot?.report_type ?? document.querySelector('input[name=report_type]:checked').value,
+                saved_at: Date.now(),
+            };
+            // Clear stale cache first to free quota, then try. On failure, drop records and save form state only.
+            sessionStorage.removeItem(CACHE_KEY);
+            try {
+                sessionStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+            } catch (e) {
+                try {
+                    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...payload, records: [], cache_skipped: true }));
+                } catch (e2) { /* ignore */ }
+            }
+        }
+        function clearCache() { sessionStorage.removeItem(CACHE_KEY); }
+        function readCacheRaw() {
+            try {
+                const raw = sessionStorage.getItem(CACHE_KEY);
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (e) { return null; }
+        }
+        function restoreCache() {
+            const c = readCacheRaw();
+            if (!c) return false;
+            if (c.date_from) document.getElementById('date_from').value = c.date_from;
+            if (c.date_to) document.getElementById('date_to').value = c.date_to;
+            if (c.report_type) {
+                const radio = document.querySelector(`input[name=report_type][value="${c.report_type}"]`);
+                if (radio) radio.checked = true;
+            }
+            if (!c.records || !c.records.length) return false;
+            lastRecords = c.records;
+            return true;
+        }
+
+        // Early restore of form state — before startDashClock reads it for the first tick
+        (function earlyRestoreFormState() {
+            const c = readCacheRaw();
+            if (!c) return;
+            if (c.date_from) document.getElementById('date_from').value = c.date_from;
+            if (c.date_to) document.getElementById('date_to').value = c.date_to;
+            if (c.report_type) {
+                const radio = document.querySelector(`input[name=report_type][value="${c.report_type}"]`);
+                if (radio) radio.checked = true;
+            }
+        })();
+
         // ========== THEME TOGGLE ==========
         const MOON_SVG = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>';
         const SUN_SVG = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
@@ -586,6 +708,7 @@
             radio.addEventListener('change', () => {
                 status.textContent = '';
                 lastRecords = null;
+                clearCache();
                 document.getElementById('dashCards').innerHTML = '';
                 document.getElementById('dashCharts').innerHTML = '';
                 document.getElementById('inspectorCards').innerHTML = '';
@@ -963,6 +1086,12 @@
 
             abortController = new AbortController();
             const formData = new FormData(this);
+            // Snapshot the submitted params — immutable for this fetch, used for cache
+            const submittedSnapshot = {
+                date_from: formData.get('date_from'),
+                date_to: formData.get('date_to'),
+                report_type: formData.get('report_type'),
+            };
 
             try {
                 const res = await fetch('/fetch-stream', {
@@ -1007,6 +1136,7 @@
                                 const records = deduplicateRecords(raw);
                                 fillSupervisor(records);
                                 lastRecords = records;
+                                saveCache(submittedSnapshot);
                                 buildDashboard();
                             }
                         }
@@ -1025,6 +1155,9 @@
                 abortController = null;
             }
         });
+
+        // ========== RESTORE CACHED DATA (after navigation back from /page2) ==========
+        if (restoreCache()) buildDashboard();
     </script>
 </body>
 </html>

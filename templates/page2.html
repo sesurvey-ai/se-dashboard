@@ -3,31 +3,347 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SE Report — Page 2</title>
+    <title>SE Report — Page 2 (Charts)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { overflow-x: hidden; max-width: 100%; }
         body {
             font-family: 'Segoe UI', Tahoma, sans-serif;
             background: #0f172a; color: #e2e8f0;
-            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            min-height: 100vh;
+            padding: clamp(16px, 2vw, 32px) clamp(12px, 2.2vw, 36px) clamp(80px, 8vw, 112px);
+            font-size: clamp(14px, 1.05vw, 17px);
         }
-        .wrap { text-align: center; padding: 32px; }
-        h1 { font-size: 32px; font-weight: 800; letter-spacing: 1px; margin-bottom: 12px; }
-        p { color: #94a3b8; margin-bottom: 24px; }
-        a.back {
+        header {
+            display: flex; justify-content: space-between; align-items: baseline;
+            gap: clamp(12px, 1.5vw, 24px); flex-wrap: wrap;
+            margin-bottom: clamp(14px, 1.6vw, 24px);
+        }
+        h1 { font-size: clamp(24px, 2.2vw, 36px); font-weight: 800; letter-spacing: 1px; }
+        header .meta { color: #94a3b8; font-size: clamp(13px, 1.05vw, 17px); font-variant-numeric: tabular-nums; }
+        header .meta b { color: #e2e8f0; }
+
+        .empty {
+            text-align: center; padding: clamp(48px, 6vw, 96px) 20px;
+        }
+        .empty p { color: #94a3b8; margin-bottom: 20px; font-size: clamp(15px, 1.15vw, 18px); }
+        .empty a.back {
             display: inline-flex; align-items: center; gap: 8px;
-            padding: 10px 20px; background: #3b82f6; color: #fff;
+            padding: clamp(9px, 0.9vw, 12px) clamp(16px, 1.6vw, 24px);
+            background: #3b82f6; color: #fff;
             border-radius: 8px; text-decoration: none; font-weight: 600;
-            transition: background 0.15s;
+            font-size: clamp(14px, 1.05vw, 17px);
         }
-        a.back:hover { background: #2563eb; }
+        .empty a.back:hover { background: #2563eb; }
+
+        .chart-grid {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: clamp(12px, 1.3vw, 20px);
+            max-width: 100%;
+        }
+        @media (max-width: 1100px) {
+            .chart-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 720px) {
+            .chart-grid { grid-template-columns: minmax(0, 1fr); }
+        }
+        .chart-card {
+            background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+            padding: clamp(14px, 1.2vw, 22px) clamp(14px, 1.4vw, 24px);
+            display: flex; flex-direction: column;
+            min-width: 0;  /* critical: allow grid item to shrink below content width */
+        }
+        .chart-card h2 {
+            font-size: clamp(15px, 1.2vw, 20px); font-weight: 700; color: #e2e8f0;
+            margin-bottom: clamp(10px, 1vw, 16px);
+            overflow-wrap: anywhere;
+        }
+        .chart-wrap {
+            position: relative; height: clamp(300px, 40vh, 460px);
+            min-width: 0; width: 100%;
+        }
+        .chart-wrap canvas { max-width: 100% !important; }
+
+        /* Floating Action Button — back to index */
+        #fabBack {
+            position: fixed; right: clamp(16px, 2vw, 32px); bottom: clamp(16px, 2vw, 32px);
+            z-index: 100;
+            width: clamp(48px, 4.2vw, 64px); height: clamp(48px, 4.2vw, 64px);
+            border-radius: 50%;
+            background: #3b82f6; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+            text-decoration: none; transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+        #fabBack svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
+        #fabBack:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+        #fabBack:active { transform: translateY(0); }
     </style>
 </head>
 <body>
-    <div class="wrap">
-        <h1>PAGE 2</h1>
-        <p>หน้าถัดไป — พร้อมใส่เนื้อหา</p>
-        <a class="back" href="/">← กลับหน้าแรก</a>
-    </div>
+    <header>
+        <h1>📊 Inspector Rankings</h1>
+        <div class="meta" id="meta"></div>
+    </header>
+    <div id="content"></div>
+
+    <a href="/" id="fabBack" title="กลับหน้าแรก" aria-label="กลับหน้าแรก">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+            <polyline points="15 18 9 12 15 6"/>
+        </svg>
+    </a>
+
+    <script>
+        Chart.register(ChartDataLabels);
+
+        const content = document.getElementById('content');
+        const meta = document.getElementById('meta');
+
+        // ========== CACHE + LIFECYCLE ==========
+        let chartInstances = [];
+        let lastSavedAt = null;
+
+        function readCache() {
+            try { return JSON.parse(sessionStorage.getItem('se_cache') || 'null'); }
+            catch (e) { return null; }
+        }
+
+        function clearView() {
+            chartInstances.forEach(ch => { try { ch.destroy(); } catch (e) {} });
+            chartInstances = [];
+            content.innerHTML = '';
+            meta.innerHTML = '';
+        }
+
+        function syncView() {
+            const cache = readCache();
+            const savedAt = cache && cache.saved_at ? cache.saved_at : null;
+            // Skip re-render if cache unchanged and charts are still on screen
+            if (savedAt === lastSavedAt && (chartInstances.length > 0 || !cache)) return;
+            clearView();
+            lastSavedAt = savedAt;
+            if (!cache || !cache.records || !cache.records.length) {
+                const msg = cache && cache.cache_skipped
+                    ? 'ข้อมูลใหญ่เกินไป เก็บข้ามหน้าไม่ได้ — กลับไปลด date range แล้ว Fetch ใหม่'
+                    : 'ยังไม่มีข้อมูล — กลับไปกด Fetch ที่หน้าแรกก่อน';
+                content.innerHTML = `
+                    <div class="empty">
+                        <p>${msg}</p>
+                        <a class="back" href="/">← กลับหน้าแรก</a>
+                    </div>`;
+                return;
+            }
+            renderCharts(cache);
+        }
+
+        syncView();
+        // Re-sync when returning from /page1 (handles both bfcache restore and full reload)
+        window.addEventListener('pageshow', syncView);
+
+        // ========== HELPERS (mirror index.html logic) ==========
+        function stripTitle(s) {
+            return String(s || '').replace(/^(นางสาว|น\.ส\.|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '').trim();
+        }
+
+        function parseDT(s) {
+            if (!s) return null;
+            const str = String(s).trim();
+            if (!str) return null;
+            const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+            if (m) {
+                let [, d, mo, y, h, mi, se] = m;
+                y = parseInt(y, 10);
+                if (y > 2400) y -= 543;
+                const dt = new Date(y, parseInt(mo, 10) - 1, parseInt(d, 10),
+                    h ? parseInt(h, 10) : 0, mi ? parseInt(mi, 10) : 0, se ? parseInt(se, 10) : 0);
+                return isNaN(dt) ? null : dt.getTime();
+            }
+            const iso = Date.parse(str);
+            return isNaN(iso) ? null : iso;
+        }
+
+        function avgDurationMin(recs, startKey, endKey) {
+            let total = 0, count = 0;
+            recs.forEach(r => {
+                const a = parseDT(r[startKey]);
+                const b = parseDT(r[endKey]);
+                if (a !== null && b !== null && b > a) {
+                    total += (b - a);
+                    count++;
+                }
+            });
+            return count > 0 ? (total / count) / 60000 : null;
+        }
+
+        function fmtThDate(s) {
+            if (!s) return '';
+            const d = new Date(s);
+            if (isNaN(d)) return s;
+            const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+            return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear() + 543}`;
+        }
+
+        function fmtMinutes(min) {
+            if (min === null || !isFinite(min)) return '-';
+            const total = Math.round(min);
+            const d = Math.floor(total / 1440);
+            const h = Math.floor((total % 1440) / 60);
+            const m = total % 60;
+            if (d > 0) return `${d}d ${h}h`;
+            if (h > 0) return `${h}h ${m}m`;
+            return `${m}m`;
+        }
+
+        function fmtDays(days) {
+            if (days === null || !isFinite(days)) return '-';
+            if (days >= 10) return `${Math.round(days)} วัน`;
+            if (days >= 1) return `${days.toFixed(1)} วัน`;
+            return `${days.toFixed(2)} วัน`;
+        }
+
+        // ========== BUILD STATS ==========
+        function renderCharts(c) {
+            const rt = c.report_type || 'enquiry';
+            const inspectorKey = rt === 'claim' ? 'empName' : rt === 'closeClaim' ? 'empname' : 'checkByName';
+
+            const filtered = c.records.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
+            const groups = {};
+            filtered.forEach(r => {
+                const name = stripTitle(r[inspectorKey]) || '(ว่าง)';
+                if (name === '(ว่าง)') return;
+                if (!groups[name]) groups[name] = [];
+                groups[name].push(r);
+            });
+
+            const stats = Object.entries(groups).map(([name, recs]) => {
+                const total = recs.length;
+                const completed = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน').length;
+                const pct = total > 0 ? (completed / total) * 100 : 0;
+                return {
+                    name, total, completed,
+                    pending: total - completed,
+                    pct,
+                    score: completed * pct,
+                    dispatchSpeed: avgDurationMin(recs, 'dispatch_dt', 'checker_dt'),
+                    reportSpeed: avgDurationMin(recs, 'sendReport_dt', 'checker_dt'),
+                };
+            });
+
+            // Meta header
+            const rtLabel = { enquiry: 'Enquiry', claim: 'Claim Report', closeClaim: 'Close Claim' }[rt] || rt;
+            meta.innerHTML = `
+                <b>${rtLabel}</b> &nbsp;·&nbsp;
+                ${fmtThDate(c.date_from)} → ${fmtThDate(c.date_to)} &nbsp;·&nbsp;
+                ${filtered.length.toLocaleString()} records &nbsp;·&nbsp;
+                ${stats.length} inspectors
+            `;
+
+            const grid = document.createElement('div');
+            grid.className = 'chart-grid';
+            content.appendChild(grid);
+
+            const chartDefs = [
+                { key: 'score',         title: '🏆 คะแนนรวม (score)',              formula: 'completed × pct', color: '#3b82f6', dir: 'desc' },
+                { key: 'dispatchSpeed', title: '🚀 จบงานเร็ว (วันจ่าย → ตรวจ)',    formula: 'avg(checker_dt − dispatch_dt)', color: '#f59e0b', dir: 'asc',  unit: 'days' },
+                { key: 'reportSpeed',   title: '📝 จบงานเร็ว (ส่งรายงาน → ตรวจ)', formula: 'avg(checker_dt − sendReport_dt)', color: '#ec4899', dir: 'asc',  unit: 'days' },
+                { key: 'total',         title: '📦 จำนวนเคสทั้งหมด (total)',       formula: 'recs.length',     color: '#06b6d4', dir: 'desc' },
+                { key: 'completed',     title: '✅ จบงาน (completed)',             formula: "stt_desc === 'จบงาน'", color: '#22c55e', dir: 'desc' },
+                { key: 'pending',       title: '⏳ งานค้าง (pending)',             formula: 'total − completed', color: '#a855f7', dir: 'desc' },
+            ];
+
+            chartDefs.forEach(def => {
+                // Filter out null/Infinity values for speed charts (no data = excluded)
+                let data = stats.map(s => {
+                    const raw = s[def.key];
+                    const value = def.unit === 'days' && raw !== null && isFinite(raw) ? raw / 1440 : raw;
+                    return { name: s.name, value };
+                });
+                if (def.unit === 'days') {
+                    data = data.filter(d => d.value !== null && isFinite(d.value));
+                }
+                data.sort((a, b) => def.dir === 'asc' ? a.value - b.value : b.value - a.value);
+
+                const card = document.createElement('div');
+                card.className = 'chart-card';
+                card.innerHTML = `
+                    <h2>${def.title}</h2>
+                    <div class="chart-wrap"><canvas></canvas></div>
+                `;
+                grid.appendChild(card);
+                const canvas = card.querySelector('canvas');
+
+                const labels = data.map(d => d.name);
+                const values = data.map(d => def.unit === 'days' ? +d.value.toFixed(2) : d.value);
+
+                const ch = new Chart(canvas, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: data.map((_, i) =>
+                                i === 0 ? '#fbbf24' : i === 1 ? '#cbd5e1' : i === 2 ? '#d97706' : '#64748b'
+                            ),
+                            borderRadius: 4,
+                        }],
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: { padding: { right: window.innerWidth < 720 ? 44 : 64 } },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                titleFont: { size: 13 },
+                                bodyFont: { size: 13 },
+                                callbacks: {
+                                    label: (ctx) => {
+                                        const v = ctx.parsed.x;
+                                        return def.unit === 'days' ? fmtDays(v) : v.toLocaleString();
+                                    },
+                                },
+                            },
+                            datalabels: {
+                                anchor: 'end',
+                                align: 'right',
+                                color: '#e2e8f0',
+                                font: (ctx) => def.key === 'score'
+                                    ? { size: 24, weight: '700' }
+                                    : { size: 13, weight: '700' },
+                                clamp: true,
+                                formatter: (v, ctx) => {
+                                    if (v === null || v === undefined) return '';
+                                    if (def.key === 'score') {
+                                        return ['🥇', '🥈', '🥉'][ctx.dataIndex] || '';
+                                    }
+                                    if (def.unit === 'days') return fmtDays(v);
+                                    return Number(v).toLocaleString();
+                                },
+                            },
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    display: def.key !== 'score',
+                                    color: '#94a3b8',
+                                    font: { size: 12 },
+                                    callback: (v) => def.unit === 'days' ? fmtDays(v) : v,
+                                },
+                                grid: { color: 'rgba(148,163,184,0.1)' },
+                            },
+                            y: {
+                                ticks: { color: '#e2e8f0', font: { size: 13 }, autoSkip: false },
+                                grid: { display: false },
+                            },
+                        },
+                    },
+                });
+                chartInstances.push(ch);
+            });
+        }
+    </script>
 </body>
 </html>

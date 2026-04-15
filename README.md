@@ -34,8 +34,10 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 
 **Inspector Cards**
 - การ์ดรายผู้ตรวจสอบงาน (checkByName) เรียงตามโหมดที่เลือก
-- แสดง Total / Completed / Pending + progress bar ต่อคน
-- 3 อันดับแรกติดเหรียญ 🥇🥈🥉 + **กรอบเรืองแสงพัลส์** (ทอง/เงิน/ทองแดง) ปรับ tone เงินเข้มอัตโนมัติเมื่อสลับเป็น light mode
+- แสดง Total / Completed / Pending + progress bar ต่อคน (Pending ใช้สีม่วง)
+- 3 อันดับแรกติดเหรียญ 🥇🥈🥉 + **กรอบเรืองแสงพัลส์** + **ลูกไฟวิ่งรอบกรอบ** (conic-gradient หมุนด้วย `@property --angle`) ปรับ tone เงินเข้มอัตโนมัติเมื่อสลับเป็น light mode
+- ใช้สูตร `minmax(min(100%, 420px), 1fr)` → responsive ตั้งแต่ desktop ถึงมือถือโดยไม่ต้องใช้ media query
+- `align-items: start` → การ์ด "(ว่าง)" ที่สูงกว่าไม่ยืดการ์ดเพื่อนในแถวเดียวกัน
 - การ์ด "(ว่าง)" รวมงานที่ไม่มีผู้ตรวจสอบ พร้อมรายชื่อพนักงาน (empcode) จัดกลุ่มตามจำนวน — ต่อท้ายสุดเสมอ
 
 **Sort modes** (dropdown + ปุ่ม `?` tooltip อธิบายสูตร)
@@ -58,6 +60,25 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - **Sort dropdown + Info tooltip** — เลือกวิธีเรียง Inspector Cards + hover ปุ่ม `?` ดูสูตรและเงื่อนไขของแต่ละโหมด
 - **Floating Action Button** — ปุ่มวงกลมมุมขวาล่าง ไปหน้า `/page2`
 
+### Page 2 — Inspector Rankings Charts
+
+- **6 กราฟแท่งแนวนอน** ต่อ 1 report ใช้ข้อมูลจาก `sessionStorage` ไม่ต้อง fetch ซ้ำ
+  - แถวบน: 🏆 คะแนนรวม · 🚀 จบงานเร็ว (วันจ่าย→ตรวจ) · 📝 จบงานเร็ว (ส่งรายงาน→ตรวจ)
+  - แถวล่าง: 📦 จำนวนเคสทั้งหมด · ✅ จบงาน · ⏳ งานค้าง
+- แท่ง top-3 ใช้สี **ทอง/เงิน/ทองแดง** เหมือนเหรียญ ที่เหลือเป็นเทา
+- กราฟ `score` แสดง 🥇🥈🥉 แทนตัวเลข + ซ่อน tick แกน X (เน้นที่อันดับ ไม่ใช่ค่า)
+- กราฟ speed ทั้ง 2 แสดงผลเป็น **จำนวนวัน** (`<1 วัน` ทศนิยม 2 ตำแหน่ง, `≥10 วัน` ปัดเต็ม)
+- Responsive grid: 3 cols → 2 cols (≤1100px) → 1 col (≤720px) พร้อม `clamp()` font sizing
+- Auto-sync เมื่อข้อมูลหน้า 1 เปลี่ยน (`pageshow` event + เทียบ `saved_at` timestamp)
+
+### Session Cache (survive navigation)
+
+- Fetch เสร็จ → strip records เหลือ **11 ฟิลด์ที่ใช้จริง** แล้วเก็บลง `sessionStorage['se_cache']`
+- ลดขนาดจาก ~7 MB เหลือ ~0.7 MB (กัน `QuotaExceededError`)
+- เก็บ snapshot ของ `date_from`, `date_to`, `report_type` จาก FormData ตอน submit (กัน race condition)
+- กลับหน้า 1 → restore form + records + re-render ทันที ไม่ต้อง fetch ใหม่
+- เปลี่ยน report_type หรือ fetch ใหม่ → ล้าง/เขียนทับ cache อัตโนมัติ
+
 ### Security
 
 - Basic Authentication (optional) ผ่าน environment variables
@@ -69,8 +90,8 @@ se-dashboard/
 ├── app.py                          # Flask backend + iSurvey client + SSE streaming
 ├── mapping_supervisor_staff_.json  # Supervisor → Staff mapping (reverse lookup)
 ├── templates/
-│   ├── index.html                  # Frontend (Dashboard UI)
-│   └── page2.html                  # Placeholder page (linked from FAB)
+│   ├── index.html                  # Frontend (Dashboard UI + session cache)
+│   └── page2.html                  # Inspector Rankings — 6 bar charts per report
 ├── requirements.txt                # Python dependencies
 ├── .gitignore
 └── .env                            # Environment variables (not tracked)
@@ -103,7 +124,7 @@ python app.py
 | Route           | Method | Description                                       |
 | --------------- | ------ | ------------------------------------------------- |
 | `/`             | GET    | Dashboard UI                                      |
-| `/page2`        | GET    | Placeholder page (navigated via FAB)             |
+| `/page2`        | GET    | Inspector Rankings — 6 bar charts (reads sessionStorage cache) |
 | `/fetch-stream` | POST   | SSE streaming fetch (pagination + progress)      |
 | `/fetch`        | POST   | Non-streaming fetch (single response)            |
 
