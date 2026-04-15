@@ -122,6 +122,7 @@
         .dash-card.green { border-left-color: #22c55e; }
         .dash-card.amber { border-left-color: #f59e0b; }
         .dash-card.rose { border-left-color: #f43f5e; }
+        .dash-card.purple { border-left-color: #a855f7; }
         .dash-card .card-icon {
             width: clamp(36px, 3vw, 56px); height: clamp(36px, 3vw, 56px); border-radius: 12px; display: flex;
             align-items: center; justify-content: center; flex-shrink: 0;
@@ -131,6 +132,7 @@
         .dash-card.green .card-icon { background: rgba(34,197,94,0.15); color: #22c55e; }
         .dash-card.amber .card-icon { background: rgba(245,158,11,0.15); color: #f59e0b; }
         .dash-card.rose .card-icon { background: rgba(244,63,94,0.15); color: #f43f5e; }
+        .dash-card.purple .card-icon { background: rgba(168,85,247,0.15); color: #a855f7; }
         .dash-card .card-value { font-size: clamp(18px, 2.2vw, 40px); font-weight: 800; color: #f1f5f9; line-height: 1; margin-left: auto; white-space: nowrap; }
         .dash-card .card-label { font-size: clamp(18px, 2.2vw, 40px); font-weight: 600; color: #94a3b8; white-space: nowrap; }
 
@@ -164,6 +166,48 @@
             gap: 12px; transition: border-color 0.15s;
         }
         .inspector-card:hover { border-color: #3b82f6; }
+
+        /* Medal cards — glowing borders */
+        .inspector-card.medal-gold {
+            border-color: #fbbf24;
+            box-shadow: 0 0 0 1px #fbbf24, 0 0 24px rgba(251, 191, 36, 0.45), 0 0 48px rgba(251, 191, 36, 0.2);
+            animation: medal-pulse-gold 2.4s ease-in-out infinite;
+        }
+        .inspector-card.medal-silver {
+            border-color: #cbd5e1;
+            box-shadow: 0 0 0 1px #cbd5e1, 0 0 20px rgba(203, 213, 225, 0.4), 0 0 40px rgba(203, 213, 225, 0.15);
+            animation: medal-pulse-silver 2.4s ease-in-out infinite;
+        }
+        .inspector-card.medal-bronze {
+            border-color: #d97706;
+            box-shadow: 0 0 0 1px #d97706, 0 0 18px rgba(217, 119, 6, 0.4), 0 0 36px rgba(217, 119, 6, 0.15);
+            animation: medal-pulse-bronze 2.4s ease-in-out infinite;
+        }
+        .inspector-card.medal-gold:hover,
+        .inspector-card.medal-silver:hover,
+        .inspector-card.medal-bronze:hover { border-color: inherit; }
+        @keyframes medal-pulse-gold {
+            0%, 100% { box-shadow: 0 0 0 1px #fbbf24, 0 0 24px rgba(251, 191, 36, 0.45), 0 0 48px rgba(251, 191, 36, 0.2); }
+            50% { box-shadow: 0 0 0 1px #fbbf24, 0 0 32px rgba(251, 191, 36, 0.7), 0 0 64px rgba(251, 191, 36, 0.3); }
+        }
+        @keyframes medal-pulse-silver {
+            0%, 100% { box-shadow: 0 0 0 1px #cbd5e1, 0 0 20px rgba(203, 213, 225, 0.4), 0 0 40px rgba(203, 213, 225, 0.15); }
+            50% { box-shadow: 0 0 0 1px #cbd5e1, 0 0 28px rgba(203, 213, 225, 0.6), 0 0 52px rgba(203, 213, 225, 0.25); }
+        }
+        @keyframes medal-pulse-bronze {
+            0%, 100% { box-shadow: 0 0 0 1px #d97706, 0 0 18px rgba(217, 119, 6, 0.4), 0 0 36px rgba(217, 119, 6, 0.15); }
+            50% { box-shadow: 0 0 0 1px #d97706, 0 0 26px rgba(217, 119, 6, 0.6), 0 0 48px rgba(217, 119, 6, 0.25); }
+        }
+        /* Light mode — silver needs a darker tone to stay visible on white */
+        body.light .inspector-card.medal-silver {
+            border-color: #64748b;
+            box-shadow: 0 0 0 1px #64748b, 0 0 18px rgba(100, 116, 139, 0.45), 0 0 36px rgba(100, 116, 139, 0.2);
+            animation: medal-pulse-silver-light 2.4s ease-in-out infinite;
+        }
+        @keyframes medal-pulse-silver-light {
+            0%, 100% { box-shadow: 0 0 0 1px #64748b, 0 0 18px rgba(100, 116, 139, 0.45), 0 0 36px rgba(100, 116, 139, 0.2); }
+            50% { box-shadow: 0 0 0 1px #64748b, 0 0 26px rgba(100, 116, 139, 0.65), 0 0 48px rgba(100, 116, 139, 0.3); }
+        }
         .inspector-name {
             font-size: 13px; font-weight: 600; color: #e2e8f0;
             white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word;
@@ -202,6 +246,51 @@
         }
         .toolbar-controls select:hover { border-color: #3b82f6; }
         body.light .toolbar-controls select { background: #f8fafc; color: #1e293b; border-color: #cbd5e1; }
+
+        /* Sort info tooltip */
+        .sort-info-wrap { position: relative; display: inline-flex; }
+        #sortInfoBtn {
+            width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px);
+            border: 1px solid #475569; border-radius: 50%;
+            background: transparent; color: #94a3b8;
+            font-size: 12px; font-weight: 700; cursor: help;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        #sortInfoBtn:hover { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+        .sort-info-tip {
+            position: absolute; top: calc(100% + 8px); right: 0;
+            min-width: 300px; max-width: 380px;
+            background: #0f172a; color: #e2e8f0;
+            border: 1px solid #475569; border-radius: 8px;
+            padding: 14px 16px; font-size: 12.5px; line-height: 1.55;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+            opacity: 0; visibility: hidden; transform: translateY(-4px);
+            transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+            z-index: 200; pointer-events: none;
+        }
+        .sort-info-wrap:hover .sort-info-tip,
+        #sortInfoBtn:focus + .sort-info-tip {
+            opacity: 1; visibility: visible; transform: translateY(0);
+        }
+        .sort-info-tip .tip-title {
+            font-weight: 700; color: #60a5fa; margin-bottom: 6px; font-size: 13px;
+        }
+        .sort-info-tip .tip-formula {
+            font-family: 'Consolas', monospace; background: #1e293b;
+            padding: 4px 8px; border-radius: 4px; display: inline-block;
+            color: #fbbf24; margin: 4px 0; font-size: 12px;
+        }
+        .sort-info-tip .tip-row { margin: 4px 0; color: #cbd5e1; }
+        .sort-info-tip .tip-row b { color: #e2e8f0; }
+        .sort-info-tip .tip-note { margin-top: 8px; padding-top: 8px; border-top: 1px solid #334155; color: #94a3b8; font-size: 11.5px; }
+        body.light .sort-info-tip { background: #fff; color: #1e293b; border-color: #cbd5e1; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); }
+        body.light .sort-info-tip .tip-title { color: #2563eb; }
+        body.light .sort-info-tip .tip-formula { background: #f1f5f9; color: #b45309; }
+        body.light .sort-info-tip .tip-row { color: #475569; }
+        body.light .sort-info-tip .tip-row b { color: #1e293b; }
+        body.light .sort-info-tip .tip-note { border-top-color: #e2e8f0; color: #64748b; }
+        body.light #sortInfoBtn { border-color: #cbd5e1; color: #64748b; }
 
         /* Light theme */
         body.light { background: #f1f5f9; color: #1e293b; }
@@ -255,6 +344,19 @@
             .dash-card .card-icon { width: 40px; height: 40px; }
             .dash-card .card-icon svg { width: 22px; height: 22px; }
         }
+
+        /* Floating Action Button */
+        #fabNext {
+            position: fixed; right: 24px; bottom: 24px; z-index: 100;
+            width: 56px; height: 56px; border-radius: 50%;
+            background: #3b82f6; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+            text-decoration: none; transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+        #fabNext:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+        #fabNext:active { transform: translateY(0); }
+        body.light #fabNext { box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3); }
     </style>
 </head>
 <body>
@@ -287,15 +389,17 @@
             </label>
             <div class="toolbar-controls">
                 <select id="sortMode" title="เรียงการ์ดตาม">
+                    <option value="score">คะแนนรวม (จบ × %)</option>
                     <option value="total">จำนวนเคส (มาก→น้อย)</option>
                     <option value="completed">จบงาน (มาก→น้อย)</option>
                     <option value="pending">ค้าง (มาก→น้อย)</option>
-                    <option value="pct">% จบงาน (มาก→น้อย)</option>
-                    <option value="name">ชื่อ (ก→ฮ)</option>
-                    <option value="score">คะแนนรวม (จบ × %)</option>
                     <option value="dispatch_speed">จบงานเร็วที่สุด (วันจ่าย)</option>
                     <option value="report_speed">จบงานเร็วที่สุด (วันส่งงาน)</option>
                 </select>
+                <span class="sort-info-wrap">
+                    <button type="button" id="sortInfoBtn" aria-label="รายละเอียดตัวกรอง">?</button>
+                    <div class="sort-info-tip" id="sortInfoTip"></div>
+                </span>
                 <button id="themeToggle" title="สลับธีม">
                     <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                         <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -332,6 +436,11 @@
                 <div class="dash-charts" id="dashCharts"></div>
             </div>
         </div>
+        <a href="/page2" id="fabNext" title="ไปหน้าถัดไป" aria-label="ไปหน้าถัดไป">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                <polyline points="9 18 15 12 9 6"/>
+            </svg>
+        </a>
     </div>
 
     <script>
@@ -384,12 +493,87 @@
         // ========== SORT MODE ==========
         const sortSelect = document.getElementById('sortMode');
         const storedSort = localStorage.getItem('se_sort');
-        const validSorts = ['total', 'completed', 'pending', 'pct', 'name', 'score', 'dispatch_speed', 'report_speed'];
-        sortSelect.value = validSorts.includes(storedSort) ? storedSort : 'total';
+        const validSorts = ['score', 'total', 'completed', 'pending', 'dispatch_speed', 'report_speed'];
+        sortSelect.value = validSorts.includes(storedSort) ? storedSort : 'score';
         sortSelect.addEventListener('change', () => {
             localStorage.setItem('se_sort', sortSelect.value);
+            updateSortInfoTip();
             if (lastRecords) buildDashboard();
         });
+
+        // ========== SORT INFO TOOLTIP ==========
+        const SORT_INFO = {
+            score: {
+                title: 'คะแนนรวม (จบ × %)',
+                formula: 'score = completed × pct',
+                rows: [
+                    ['วัดอะไร', 'ถ่วงน้ำหนักระหว่างปริมาณงานที่จบและอัตราการจบ'],
+                    ['ทิศทาง', 'มาก → น้อย'],
+                    ['ข้อดี', 'ต้องทำ<b>เยอะ</b>และ<b>อัตราดี</b> ถึงจะชนะ'],
+                ],
+                note: 'ตัว default — คนถือน้อยทำ 1/1 = 100% ไม่ชนะคนแบกหนักทำ 48/50',
+            },
+            total: {
+                title: 'จำนวนเคส',
+                formula: 'total = recs.length',
+                rows: [
+                    ['วัดอะไร', 'จำนวน record ทั้งหมดในกลุ่ม'],
+                    ['ทิศทาง', 'มาก → น้อย'],
+                    ['กรองก่อน', 'ตัด stt_desc = "ยกเลิกเคลม" ออก'],
+                ],
+            },
+            completed: {
+                title: 'จบงาน',
+                formula: "stt_desc === 'จบงาน'",
+                rows: [
+                    ['วัดอะไร', 'จำนวนเคสที่จบงานจริง'],
+                    ['ทิศทาง', 'มาก → น้อย'],
+                ],
+                note: 'คนถือเยอะได้เปรียบ — ไม่สนใจสัดส่วน',
+            },
+            pending: {
+                title: 'ค้าง',
+                formula: 'pending = total − completed',
+                rows: [
+                    ['วัดอะไร', 'เคสที่ยังไม่ "จบงาน"'],
+                    ['ทิศทาง', 'มาก → น้อย'],
+                ],
+                note: 'ใช้หาคนงานค้างเยอะสุด เพื่อกระจายโหลด',
+            },
+            dispatch_speed: {
+                title: 'จบงานเร็วที่สุด (วันจ่าย)',
+                formula: 'avg(checker_dt − dispatch_dt)',
+                rows: [
+                    ['วัดอะไร', 'เวลาเฉลี่ยจากวัน<b>จ่ายงาน</b> → วัน<b>ตรวจ</b>'],
+                    ['ทิศทาง', 'น้อย → มาก (เร็วสุดขึ้นก่อน)'],
+                    ['ข้อแม้', 'นับเฉพาะ record ที่มีวันที่ครบทั้ง 2 ฝั่ง'],
+                ],
+                note: 'คนที่ไม่มีข้อมูลครบ → ถูกดันไปท้ายสุด (Infinity)',
+            },
+            report_speed: {
+                title: 'จบงานเร็วที่สุด (วันส่งงาน)',
+                formula: 'avg(checker_dt − sendReport_dt)',
+                rows: [
+                    ['วัดอะไร', 'เวลาเฉลี่ยจากวัน<b>ส่งรายงาน</b> → วัน<b>ตรวจ</b>'],
+                    ['ทิศทาง', 'น้อย → มาก (เร็วสุดขึ้นก่อน)'],
+                    ['ข้อแม้', 'นับเฉพาะ record ที่มีวันที่ครบทั้ง 2 ฝั่ง'],
+                ],
+                note: 'คนที่ไม่มีข้อมูลครบ → ถูกดันไปท้ายสุด (Infinity)',
+            },
+        };
+        const sortInfoTip = document.getElementById('sortInfoTip');
+        function updateSortInfoTip() {
+            const info = SORT_INFO[sortSelect.value];
+            if (!info) return;
+            let html = `<div class="tip-title">${info.title}</div>`;
+            html += `<div class="tip-formula">${info.formula}</div>`;
+            info.rows.forEach(([k, v]) => {
+                html += `<div class="tip-row"><b>${k}:</b> ${v}</div>`;
+            });
+            if (info.note) html += `<div class="tip-note">${info.note}</div>`;
+            sortInfoTip.innerHTML = html;
+        }
+        updateSortInfoTip();
 
         // ========== TOOLBAR TOGGLE ==========
         document.getElementById('toolbarToggle').addEventListener('click', (e) => {
@@ -527,7 +711,7 @@
                 const pending = records.length - completed;
                 addCard(cards, records.length, 'Total Claims', 'blue', 'total');
                 addCard(cards, completed, 'Completed', 'green', 'completed');
-                addCard(cards, pending, 'Pending', 'amber', 'time');
+                addCard(cards, pending, 'Pending', 'purple', 'time');
             } else if (rt === 'claim') {
                 const closed = records.filter(r => r.close_dt && String(r.close_dt).trim()).length;
                 const totalCost = sumNumeric(records, 'D_TOTAL_COST');
@@ -616,13 +800,16 @@
             const allEntries = Object.entries(groups);
             const emptyEntry = allEntries.find(([name]) => name === '(ว่าง)');
             const nonEmpty = allEntries.filter(([name]) => name !== '(ว่าง)');
-            nonEmpty.sort(comparators[sortMode] || comparators.total);
+            nonEmpty.sort(comparators[sortMode] || comparators.score);
             const sorted = emptyEntry ? [...nonEmpty, emptyEntry] : nonEmpty;
 
             const MEDALS = ['🥇', '🥈', '🥉'];
+            const MEDAL_CLASSES = ['medal-gold', 'medal-silver', 'medal-bronze'];
             const medalMap = new Map();
+            const medalClassMap = new Map();
             for (let idx = 0; idx < Math.min(3, nonEmpty.length); idx++) {
                 medalMap.set(nonEmpty[idx][0], MEDALS[idx]);
+                medalClassMap.set(nonEmpty[idx][0], MEDAL_CLASSES[idx]);
             }
 
             const grid = document.createElement('div');
@@ -630,7 +817,8 @@
 
             sorted.forEach(([name, recs]) => {
                 const card = document.createElement('div');
-                card.className = 'inspector-card';
+                const medalClass = medalClassMap.get(name);
+                card.className = medalClass ? `inspector-card ${medalClass}` : 'inspector-card';
                 card.style.flexDirection = 'column';
                 card.style.alignItems = 'stretch';
                 card.style.gap = '6px';
@@ -671,7 +859,7 @@
                     <div style="display:flex; flex-direction:column; gap:6px; font-size:18px; border-top:1px solid #334155; padding-top:10px;">
                         <div style="display:flex; justify-content:space-between; color:#3b82f6;"><span>Total Claims</span><b>${total}</b></div>
                         <div style="display:flex; justify-content:space-between; color:#22c55e;"><span>Completed</span><b>${completed}</b></div>
-                        <div style="display:flex; justify-content:space-between; color:#f59e0b;"><span>Pending</span><b>${pending}</b></div>
+                        <div style="display:flex; justify-content:space-between; color:#a855f7;"><span>Pending</span><b>${pending}</b></div>
                     </div>`;
                 }
 

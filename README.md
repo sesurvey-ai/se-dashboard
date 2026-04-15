@@ -33,9 +33,15 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - Pending — ที่เหลือ
 
 **Inspector Cards**
-- การ์ดรายผู้ตรวจสอบงาน (checkByName) เรียงมากไปน้อย
+- การ์ดรายผู้ตรวจสอบงาน (checkByName) เรียงตามโหมดที่เลือก
 - แสดง Total / Completed / Pending + progress bar ต่อคน
-- การ์ด "(ว่าง)" รวมงานที่ไม่มีผู้ตรวจสอบ พร้อมรายชื่อพนักงาน (empcode) จัดกลุ่มตามจำนวน
+- 3 อันดับแรกติดเหรียญ 🥇🥈🥉 + **กรอบเรืองแสงพัลส์** (ทอง/เงิน/ทองแดง) ปรับ tone เงินเข้มอัตโนมัติเมื่อสลับเป็น light mode
+- การ์ด "(ว่าง)" รวมงานที่ไม่มีผู้ตรวจสอบ พร้อมรายชื่อพนักงาน (empcode) จัดกลุ่มตามจำนวน — ต่อท้ายสุดเสมอ
+
+**Sort modes** (dropdown + ปุ่ม `?` tooltip อธิบายสูตร)
+- `score` *(default)* — `completed × pct` ถ่วงน้ำหนักปริมาณ × คุณภาพ
+- `total` / `completed` / `pending` — มาก → น้อย
+- `dispatch_speed` / `report_speed` — เวลาเฉลี่ย `checker_dt − dispatch_dt` / `− sendReport_dt`, น้อย → มาก
 
 ### Header
 
@@ -49,6 +55,8 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
   - ติ๊ก Today → ล็อค field ให้เป็นวันปัจจุบัน และ Auto Refresh จะ re-set เป็นวันปัจจุบันในแต่ละรอบ (แก้ปัญหาหน้าเว็บเปิดค้างข้ามคืน)
 - **Auto Refresh** — ดึงข้อมูลใหม่ทุก 5 นาที (เช็ค Today-lock ก่อน submit)
 - **Theme toggle** — Dark / Light (จำค่าใน localStorage)
+- **Sort dropdown + Info tooltip** — เลือกวิธีเรียง Inspector Cards + hover ปุ่ม `?` ดูสูตรและเงื่อนไขของแต่ละโหมด
+- **Floating Action Button** — ปุ่มวงกลมมุมขวาล่าง ไปหน้า `/page2`
 
 ### Security
 
@@ -61,7 +69,8 @@ se-dashboard/
 ├── app.py                          # Flask backend + iSurvey client + SSE streaming
 ├── mapping_supervisor_staff_.json  # Supervisor → Staff mapping (reverse lookup)
 ├── templates/
-│   └── index.html                  # Frontend (Dashboard UI)
+│   ├── index.html                  # Frontend (Dashboard UI)
+│   └── page2.html                  # Placeholder page (linked from FAB)
 ├── requirements.txt                # Python dependencies
 ├── .gitignore
 └── .env                            # Environment variables (not tracked)
@@ -94,6 +103,7 @@ python app.py
 | Route           | Method | Description                                       |
 | --------------- | ------ | ------------------------------------------------- |
 | `/`             | GET    | Dashboard UI                                      |
+| `/page2`        | GET    | Placeholder page (navigated via FAB)             |
 | `/fetch-stream` | POST   | SSE streaming fetch (pagination + progress)      |
 | `/fetch`        | POST   | Non-streaming fetch (single response)            |
 

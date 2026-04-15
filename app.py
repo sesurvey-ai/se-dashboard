@@ -260,6 +260,12 @@ def index():
                            staff_supervisor_map=STAFF_SUPERVISOR_MAP)
 
 
+@app.route('/page2')
+@check_basic_auth
+def page2():
+    return render_template('page2.html')
+
+
 @app.route('/fetch', methods=['POST'])
 @check_basic_auth
 def fetch():
