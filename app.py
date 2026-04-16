@@ -44,6 +44,30 @@ PAGE_LIMIT = 5000
 # Number of chunks fetched in parallel from iSurvey
 PARALLEL_CHUNKS = 4
 
+# Fields kept on the server before streaming to the browser. iSurvey returns ~48
+# fields per record but the dashboard only reads a small subset (dedup keys,
+# inspector identifiers, status, timestamps, and a few display values). Stripping
+# here cuts SSE payload ~70% and keeps accumulated[] memory in check on large
+# ranges (1 year = 200k+ records).
+KEEP_FIELDS = frozenset({
+    # dedup keys
+    'survey_no', 'notify_no', 'claim_no',
+    # inspector identifiers (differ per report_type)
+    'checkByName', 'empName', 'empname', 'empcode',
+    # status (used to filter ยกเลิกเคลม and count จบงาน)
+    'stt_desc',
+    # timestamps used by speed metrics
+    'dispatch_dt', 'sendReport_dt', 'checker_dt', 'close_dt',
+    # display values on closeClaim / claim views
+    'travel_time', 'D_TOTAL_COST',
+})
+
+
+def _slim_record(r):
+    if not isinstance(r, dict):
+        return r
+    return {k: v for k, v in r.items() if k in KEEP_FIELDS}
+
 
 def _date_chunks(start: datetime, end: datetime, max_days: int = CHUNK_DAYS):
     """Yield (chunk_start, chunk_end) datetime pairs covering *start* → *end*
@@ -394,6 +418,7 @@ def fetch_stream():
                         records = body
                         total = len(body)
 
+                    records = [_slim_record(r) for r in records]
                     event_queue.put(('page', chunk_idx, page, records, int(total)))
 
                     if not records or start + limit >= int(total):
