@@ -542,22 +542,77 @@
             }
             return out;
         }
+        // Pre-aggregate page2 inspector stats so /page2 works even when records
+        // are too large for sessionStorage (e.g. 1-year fetch ~200k records).
+        function computePage2Stats(records, report_type) {
+            const inspectorKey = report_type === 'claim' ? 'empName'
+                : report_type === 'closeClaim' ? 'empname' : 'checkByName';
+            const stripT = (s) => String(s || '').replace(/^(นางสาว|น\.ส\.|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '').trim();
+            const parseT = (s) => {
+                if (!s) return null;
+                const str = String(s).trim();
+                if (!str) return null;
+                const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+                if (m) {
+                    let [, d, mo, y, h, mi, se] = m;
+                    y = parseInt(y, 10);
+                    if (y > 2400) y -= 543;
+                    const dt = new Date(y, parseInt(mo, 10) - 1, parseInt(d, 10),
+                        h ? parseInt(h, 10) : 0, mi ? parseInt(mi, 10) : 0, se ? parseInt(se, 10) : 0);
+                    return isNaN(dt) ? null : dt.getTime();
+                }
+                const iso = Date.parse(str);
+                return isNaN(iso) ? null : iso;
+            };
+            const avgMin = (recs, a, b) => {
+                let total = 0, count = 0;
+                recs.forEach(r => {
+                    const ta = parseT(r[a]), tb = parseT(r[b]);
+                    if (ta !== null && tb !== null && tb > ta) { total += tb - ta; count++; }
+                });
+                return count > 0 ? (total / count) / 60000 : null;
+            };
+            const filtered = records.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
+            const groups = {};
+            filtered.forEach(r => {
+                const name = stripT(r[inspectorKey]) || '(ว่าง)';
+                if (name === '(ว่าง)') return;
+                (groups[name] = groups[name] || []).push(r);
+            });
+            const stats = Object.entries(groups).map(([name, recs]) => {
+                const total = recs.length;
+                const completed = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน').length;
+                const pct = total > 0 ? (completed / total) * 100 : 0;
+                return {
+                    name, total, completed, pending: total - completed, pct,
+                    score: completed * pct,
+                    dispatchSpeed: avgMin(recs, 'dispatch_dt', 'checker_dt'),
+                    reportSpeed: avgMin(recs, 'sendReport_dt', 'checker_dt'),
+                };
+            });
+            return { stats, filteredCount: filtered.length };
+        }
         function saveCache(snapshot) {
             if (!lastRecords) return;
-            const payload = {
-                records: lastRecords.map(slimRecord),
+            const rt = snapshot?.report_type ?? document.querySelector('input[name=report_type]:checked').value;
+            const page2 = computePage2Stats(lastRecords, rt);
+            const meta = {
                 date_from: snapshot?.date_from ?? document.getElementById('date_from').value,
                 date_to: snapshot?.date_to ?? document.getElementById('date_to').value,
-                report_type: snapshot?.report_type ?? document.querySelector('input[name=report_type]:checked').value,
+                report_type: rt,
                 saved_at: Date.now(),
+                page2_stats: page2.stats,
+                page2_filtered: page2.filteredCount,
             };
-            // Clear stale cache first to free quota, then try. On failure, drop records and save form state only.
+            const payload = { ...meta, records: lastRecords.map(slimRecord) };
+            // Clear stale cache first to free quota, then try. On failure, drop
+            // records but keep page2_stats so the rankings page still works.
             sessionStorage.removeItem(CACHE_KEY);
             try {
                 sessionStorage.setItem(CACHE_KEY, JSON.stringify(payload));
             } catch (e) {
                 try {
-                    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...payload, records: [], cache_skipped: true }));
+                    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...meta, records: [], cache_skipped: true }));
                 } catch (e2) { /* ignore */ }
             }
         }

@@ -124,10 +124,10 @@
             if (savedAt === lastSavedAt && (chartInstances.length > 0 || !cache)) return;
             clearView();
             lastSavedAt = savedAt;
-            if (!cache || !cache.records || !cache.records.length) {
-                const msg = cache && cache.cache_skipped
-                    ? 'ข้อมูลใหญ่เกินไป เก็บข้ามหน้าไม่ได้ — กลับไปลด date range แล้ว Fetch ใหม่'
-                    : 'ยังไม่มีข้อมูล — กลับไปกด Fetch ที่หน้าแรกก่อน';
+            const hasRecords = cache && cache.records && cache.records.length;
+            const hasPreStats = cache && cache.page2_stats && cache.page2_stats.length;
+            if (!cache || (!hasRecords && !hasPreStats)) {
+                const msg = 'ยังไม่มีข้อมูล — กลับไปกด Fetch ที่หน้าแรกก่อน';
                 content.innerHTML = `
                     <div class="empty">
                         <p>${msg}</p>
@@ -206,37 +206,43 @@
         // ========== BUILD STATS ==========
         function renderCharts(c) {
             const rt = c.report_type || 'enquiry';
-            const inspectorKey = rt === 'claim' ? 'empName' : rt === 'closeClaim' ? 'empname' : 'checkByName';
-
-            const filtered = c.records.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
-            const groups = {};
-            filtered.forEach(r => {
-                const name = stripTitle(r[inspectorKey]) || '(ว่าง)';
-                if (name === '(ว่าง)') return;
-                if (!groups[name]) groups[name] = [];
-                groups[name].push(r);
-            });
-
-            const stats = Object.entries(groups).map(([name, recs]) => {
-                const total = recs.length;
-                const completed = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน').length;
-                const pct = total > 0 ? (completed / total) * 100 : 0;
-                return {
-                    name, total, completed,
-                    pending: total - completed,
-                    pct,
-                    score: completed * pct,
-                    dispatchSpeed: avgDurationMin(recs, 'dispatch_dt', 'checker_dt'),
-                    reportSpeed: avgDurationMin(recs, 'sendReport_dt', 'checker_dt'),
-                };
-            });
+            let stats, filteredCount;
+            if (c.page2_stats && c.page2_stats.length) {
+                // Pre-aggregated by index.html — avoids quota issues on large ranges
+                stats = c.page2_stats;
+                filteredCount = c.page2_filtered ?? stats.reduce((s, x) => s + x.total, 0);
+            } else {
+                const inspectorKey = rt === 'claim' ? 'empName' : rt === 'closeClaim' ? 'empname' : 'checkByName';
+                const filtered = c.records.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
+                const groups = {};
+                filtered.forEach(r => {
+                    const name = stripTitle(r[inspectorKey]) || '(ว่าง)';
+                    if (name === '(ว่าง)') return;
+                    if (!groups[name]) groups[name] = [];
+                    groups[name].push(r);
+                });
+                stats = Object.entries(groups).map(([name, recs]) => {
+                    const total = recs.length;
+                    const completed = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน').length;
+                    const pct = total > 0 ? (completed / total) * 100 : 0;
+                    return {
+                        name, total, completed,
+                        pending: total - completed,
+                        pct,
+                        score: completed * pct,
+                        dispatchSpeed: avgDurationMin(recs, 'dispatch_dt', 'checker_dt'),
+                        reportSpeed: avgDurationMin(recs, 'sendReport_dt', 'checker_dt'),
+                    };
+                });
+                filteredCount = filtered.length;
+            }
 
             // Meta header
             const rtLabel = { enquiry: 'Enquiry', claim: 'Claim Report', closeClaim: 'Close Claim' }[rt] || rt;
             meta.innerHTML = `
                 <b>${rtLabel}</b> &nbsp;·&nbsp;
                 ${fmtThDate(c.date_from)} → ${fmtThDate(c.date_to)} &nbsp;·&nbsp;
-                ${filtered.length.toLocaleString()} records &nbsp;·&nbsp;
+                ${filteredCount.toLocaleString()} records &nbsp;·&nbsp;
                 ${stats.length} inspectors
             `;
 
