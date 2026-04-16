@@ -1103,6 +1103,7 @@
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
+                const accumulated = [];
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -1123,17 +1124,25 @@
                         const payload = JSON.parse(dataStr);
 
                         if (eventType === 'progress') {
-                            const pct = payload.total > 0 ? Math.round((payload.fetched / payload.total) * 100) : 0;
-                            progressFill.style.width = pct + '%';
-                            progressText.textContent = `Page ${payload.page} — ${payload.fetched.toLocaleString()}/${payload.total.toLocaleString()} records (${pct}%)`;
+                            const chunkInfo = payload.totalChunks > 1
+                                ? `Chunk ${payload.chunk}/${payload.totalChunks} · `
+                                : '';
+                            const pct = (payload.totalChunks > 1)
+                                ? Math.round(((payload.chunk - 1) / payload.totalChunks) * 100 + (1 / payload.totalChunks) * (payload.total > 0 ? Math.min((payload.fetched / payload.total) * 100, 100) : 0))
+                                : (payload.total > 0 ? Math.round((payload.fetched / payload.total) * 100) : 0);
+                            progressFill.style.width = Math.min(pct, 100) + '%';
+                            progressText.textContent = `${chunkInfo}Page ${payload.page} — ${payload.fetched.toLocaleString()} records fetched`;
+                        } else if (eventType === 'batch') {
+                            if (payload.records && payload.records.length) {
+                                for (const r of payload.records) accumulated.push(r);
+                            }
                         } else if (eventType === 'error') {
                             throw new Error(payload.error);
                         } else if (eventType === 'done') {
-                            const raw = payload.data;
-                            if (!raw || raw.length === 0) {
+                            if (accumulated.length === 0) {
                                 status.textContent = 'No data found.';
                             } else {
-                                const records = deduplicateRecords(raw);
+                                const records = deduplicateRecords(accumulated);
                                 fillSupervisor(records);
                                 lastRecords = records;
                                 saveCache(submittedSnapshot);

@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 import requests
@@ -30,6 +30,20 @@ def check_basic_auth(f):
     return decorated
 
 BASE_URL = 'https://cloud.isurvey.mobi/web/php'
+
+# Maximum days per API chunk – keeps each request small enough to avoid
+# server-side read timeouts on large date ranges.
+CHUNK_DAYS = 14
+
+
+def _date_chunks(start: datetime, end: datetime, max_days: int = CHUNK_DAYS):
+    """Yield (chunk_start, chunk_end) datetime pairs covering *start* → *end*
+    in segments of at most *max_days* days each."""
+    cursor = start
+    while cursor <= end:
+        chunk_end = min(cursor + timedelta(days=max_days - 1), end)
+        yield cursor, chunk_end
+        cursor = chunk_end + timedelta(days=1)
 
 
 class ISurveyClient:
@@ -90,39 +104,48 @@ class ISurveyClient:
             return _do_request()
 
     def fetch_all_pages(self, date_from, date_to, report_type='enquiry'):
+        """Fetch all records, splitting large date ranges into monthly chunks
+        so the remote server doesn't time out."""
+        df_start = datetime.strptime(date_from, '%d/%m/%Y')
+        dt_end = datetime.strptime(date_to, '%d/%m/%Y')
+
         all_records = []
-        page = 1
-        start = 0
-        limit = 200
 
-        while True:
-            params = {
-                'con_date': 2,
-                'date_from': date_from,
-                'date_to': date_to,
-                'report_type': report_type,
-                'page': page,
-                'start': start,
-                'limit': limit,
-            }
-            body = self.get_report_page(params, timeout=30)
+        for chunk_start, chunk_end in _date_chunks(df_start, dt_end):
+            c_from = chunk_start.strftime('%d/%m/%Y')
+            c_to = chunk_end.strftime('%d/%m/%Y')
+            page = 1
+            start = 0
+            limit = 1000
 
-            if isinstance(body, dict):
-                records = body.get('arr_data', body.get('data', []))
-                total = body.get('total', body.get('totalCount', 0))
-            else:
-                records = body
-                total = len(body)
+            while True:
+                params = {
+                    'con_date': 2,
+                    'date_from': c_from,
+                    'date_to': c_to,
+                    'report_type': report_type,
+                    'page': page,
+                    'start': start,
+                    'limit': limit,
+                }
+                body = self.get_report_page(params, timeout=60)
 
-            all_records.extend(records)
+                if isinstance(body, dict):
+                    records = body.get('arr_data', body.get('data', []))
+                    total = body.get('total', body.get('totalCount', 0))
+                else:
+                    records = body
+                    total = len(body)
 
-            if not records or len(all_records) >= total:
-                break
+                all_records.extend(records)
 
-            page += 1
-            start += limit
+                if not records or start + limit >= int(total):
+                    break
 
-        return all_records, total
+                page += 1
+                start += limit
+
+        return all_records, len(all_records)
 
 
 COLUMN_MAP = {
@@ -299,8 +322,6 @@ def fetch_stream():
     try:
         df_date = datetime.strptime(date_from, '%Y-%m-%d')
         dt_date = datetime.strptime(date_to, '%Y-%m-%d')
-        df = df_date.strftime('%d/%m/%Y')
-        dt = dt_date.strftime('%d/%m/%Y')
     except ValueError:
         def error_gen():
             yield f"event: error\ndata: {json.dumps({'error': 'รูปแบบวันที่ไม่ถูกต้อง'})}\n\n"
@@ -311,6 +332,9 @@ def fetch_stream():
             yield f"event: error\ndata: {json.dumps({'error': 'ช่วงวันที่เกิน 2 ปี กรุณาเลือกช่วงที่สั้นกว่านี้'})}\n\n"
         return Response(range_error(), mimetype='text/event-stream')
 
+    chunks = list(_date_chunks(df_date, dt_date))
+    total_chunks = len(chunks)
+
     def generate():
         try:
             client.login()
@@ -319,53 +343,60 @@ def fetch_stream():
             yield f"event: error\ndata: {json.dumps({'error': f'Login failed: {e}'})}\n\n"
             return
 
-        deadline = time.monotonic() + 540
-        all_records = []
-        page = 1
-        start = 0
-        limit = 200
+        deadline = time.monotonic() + 3600  # 60 minutes
+        fetched_count = 0
 
-        while True:
-            if time.monotonic() > deadline:
-                yield f"event: error\ndata: {json.dumps({'error': 'Request timed out (เกิน 9 นาที) ลองเลือกช่วงวันที่สั้นลง'})}\n\n"
-                return
+        for chunk_idx, (chunk_start, chunk_end) in enumerate(chunks, 1):
+            c_from = chunk_start.strftime('%d/%m/%Y')
+            c_to = chunk_end.strftime('%d/%m/%Y')
+            page = 1
+            start = 0
+            limit = 1000
 
-            params = {
-                'con_date': 2,
-                'date_from': df,
-                'date_to': dt,
-                'report_type': report_type,
-                'page': page,
-                'start': start,
-                'limit': limit,
-            }
+            while True:
+                if time.monotonic() > deadline:
+                    yield f"event: error\ndata: {json.dumps({'error': 'Request timed out (เกิน 60 นาที) ลองเลือกช่วงวันที่สั้นลง'})}\n\n"
+                    return
 
-            try:
-                body = client.get_report_page(params, timeout=60)
-            except Exception as e:
-                client._logged_in = False
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-                return
+                params = {
+                    'con_date': 2,
+                    'date_from': c_from,
+                    'date_to': c_to,
+                    'report_type': report_type,
+                    'page': page,
+                    'start': start,
+                    'limit': limit,
+                }
 
-            if isinstance(body, dict):
-                records = body.get('arr_data', body.get('data', []))
-                total = body.get('total', body.get('totalCount', 0))
-            else:
-                records = body
-                total = len(body)
+                try:
+                    body = client.get_report_page(params, timeout=60)
+                except Exception as e:
+                    client._logged_in = False
+                    yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                    return
 
-            all_records.extend(records)
+                if isinstance(body, dict):
+                    records = body.get('arr_data', body.get('data', []))
+                    total = body.get('total', body.get('totalCount', 0))
+                else:
+                    records = body
+                    total = len(body)
 
-            yield f"event: progress\ndata: {json.dumps({'fetched': len(all_records), 'total': total, 'page': page})}\n\n"
+                fetched_count += len(records)
 
-            if not records or len(all_records) >= total:
-                break
+                if records:
+                    yield f"event: batch\ndata: {json.dumps({'records': records})}\n\n"
 
-            page += 1
-            start += limit
+                yield f"event: progress\ndata: {json.dumps({'fetched': fetched_count, 'total': total, 'page': page, 'chunk': chunk_idx, 'totalChunks': total_chunks})}\n\n"
+
+                if not records or start + limit >= int(total):
+                    break
+
+                page += 1
+                start += limit
 
         columns = COLUMN_MAP.get(report_type)
-        yield f"event: done\ndata: {json.dumps({'total': len(all_records), 'data': all_records, 'columns': columns})}\n\n"
+        yield f"event: done\ndata: {json.dumps({'total': fetched_count, 'columns': columns})}\n\n"
 
     return Response(
         generate(),

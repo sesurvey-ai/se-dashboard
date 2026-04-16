@@ -16,6 +16,8 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 ### Data Pipeline
 
 - **SSE streaming fetch** — ดึงข้อมูลแบบ pagination อัตโนมัติพร้อม progress bar + ปุ่ม Cancel
+- **Date range chunking** — แบ่ง date range ใหญ่ ๆ เป็น chunks ละ 14 วัน (`CHUNK_DAYS`) ป้องกัน server-side read timeout เมื่อ query ช่วงยาว
+- **Batch streaming** — ส่ง records ทีละ page ผ่าน `event: batch` แทนการรวมทั้งหมดส่งครั้งเดียว → กัน `RangeError: Invalid string length` ของ JS (string > 512MB)
 - **Auto retry** — retry 3 ครั้งเมื่อเจอ 502/503/504
 - **Auto re-login** — ต่อ session ใหม่อัตโนมัติเมื่อ iSurvey หมดอายุระหว่างดึงข้อมูล
 - **Dedup** — ลบแถวซ้ำ (key: `survey_no` → `notify_no` → `claim_no`) เก็บแถวที่มีข้อมูลครบที่สุด
@@ -132,8 +134,25 @@ python app.py
 - `date_from`, `date_to` — `YYYY-MM-DD`
 - `report_type` — `enquiry` (default) / `closeClaim` / `claim`
 
+**SSE events** (`/fetch-stream`):
+- `event: batch` — `{records: [...]}` — ชุด records ต่อ page
+- `event: progress` — `{fetched, total, page, chunk, totalChunks}`
+- `event: done` — `{total, columns}` (ไม่มี data แล้ว — รวม batches ฝั่ง frontend)
+- `event: error` — `{error: "..."}`
+
+## Configuration
+
+| Constant / ค่า        | Default | หมายเหตุ                                   |
+| --------------------- | ------- | ------------------------------------------ |
+| `CHUNK_DAYS`          | 14      | จำนวนวันสูงสุดต่อ 1 request ไป iSurvey     |
+| Per-request timeout   | 60s     | timeout ต่อ HTTP call                       |
+| Overall deadline      | 60 นาที | timeout รวมของ SSE stream                   |
+| Page size (`limit`)   | 1000    | records ต่อ page                            |
+| Max date range        | 730 วัน (2 ปี) | เกินนี้ backend ตอบ error               |
+
 ## Notes
 
 - Backend รองรับ 3 ประเภทรายงาน (enquiry / closeClaim / claim) — ปัจจุบัน UI ซ่อน toggle ไว้และใช้ `enquiry` เป็นค่าเริ่มต้น
 - ช่วงวันที่จำกัดไม่เกิน 2 ปี (backend จะ return error ถ้าเกิน)
 - Gunicorn timeout 600s สำหรับการดึงข้อมูลช่วงยาว
+- **ดึง 1 ปีขึ้นไป:** record อาจถึงหลักล้าน กินหน่วยความจำเบราว์เซอร์ >1GB — แนะนำแบ่งดึงทีละไตรมาสถ้าเจอปัญหา memory
