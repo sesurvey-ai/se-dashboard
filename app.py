@@ -1,8 +1,11 @@
 import json
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from functools import wraps
+from queue import Empty, Queue
 
 import requests
 from dotenv import load_dotenv
@@ -33,7 +36,13 @@ BASE_URL = 'https://cloud.isurvey.mobi/web/php'
 
 # Maximum days per API chunk – keeps each request small enough to avoid
 # server-side read timeouts on large date ranges.
-CHUNK_DAYS = 14
+CHUNK_DAYS = 30
+
+# Records per page from iSurvey API
+PAGE_LIMIT = 5000
+
+# Number of chunks fetched in parallel from iSurvey
+PARALLEL_CHUNKS = 4
 
 
 def _date_chunks(start: datetime, end: datetime, max_days: int = CHUNK_DAYS):
@@ -49,30 +58,44 @@ def _date_chunks(start: datetime, end: datetime, max_days: int = CHUNK_DAYS):
 class ISurveyClient:
     def __init__(self):
         self.session = requests.Session()
-        retry = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[502, 503, 504],
-            allowed_methods=["GET", "POST"],
+        # Allow enough pool connections for parallel chunk fetching
+        adapter_kwargs = dict(
+            pool_connections=PARALLEL_CHUNKS * 2,
+            pool_maxsize=PARALLEL_CHUNKS * 2,
+            max_retries=Retry(
+                total=3,
+                backoff_factor=1,
+                status_forcelist=[502, 503, 504],
+                allowed_methods=["GET", "POST"],
+            ),
         )
-        adapter = HTTPAdapter(max_retries=retry)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
+        self.session.mount("https://", HTTPAdapter(**adapter_kwargs))
+        self.session.mount("http://", HTTPAdapter(**adapter_kwargs))
         self._logged_in = False
+        self._login_lock = threading.Lock()
 
     def login(self):
+        # Double-check pattern: avoid acquiring the lock on every call
         if self._logged_in:
             return
-        res = self.session.post(
-            f'{BASE_URL}/login.php',
-            data={
-                'username': os.getenv('ISURVEY_USER'),
-                'password': os.getenv('ISURVEY_PASS'),
-            },
-            timeout=15,
-        )
-        res.raise_for_status()
-        self._logged_in = True
+        with self._login_lock:
+            if self._logged_in:
+                return
+            res = self.session.post(
+                f'{BASE_URL}/login.php',
+                data={
+                    'username': os.getenv('ISURVEY_USER'),
+                    'password': os.getenv('ISURVEY_PASS'),
+                },
+                timeout=15,
+            )
+            res.raise_for_status()
+            self._logged_in = True
+
+    def _force_relogin(self):
+        with self._login_lock:
+            self._logged_in = False
+        self.login()
 
     def get_report_page(self, params, timeout=60):
         """Fetch a single report page. Auto re-login once on 401/403 or invalid
@@ -94,13 +117,11 @@ class ISurveyClient:
         except requests.exceptions.HTTPError as e:
             if e.response is None or e.response.status_code not in (401, 403):
                 raise
-            self._logged_in = False
-            self.login()
+            self._force_relogin()
             return _do_request()
         except ValueError:
             # JSONDecodeError — session likely expired and we got HTML back
-            self._logged_in = False
-            self.login()
+            self._force_relogin()
             return _do_request()
 
     def fetch_all_pages(self, date_from, date_to, report_type='enquiry'):
@@ -116,7 +137,7 @@ class ISurveyClient:
             c_to = chunk_end.strftime('%d/%m/%Y')
             page = 1
             start = 0
-            limit = 1000
+            limit = PAGE_LIMIT
 
             while True:
                 params = {
@@ -344,56 +365,82 @@ def fetch_stream():
             return
 
         deadline = time.monotonic() + 3600  # 60 minutes
-        fetched_count = 0
+        event_queue = Queue()
+        stop_event = threading.Event()
 
-        for chunk_idx, (chunk_start, chunk_end) in enumerate(chunks, 1):
+        def fetch_one_chunk(chunk_idx, chunk_start, chunk_end):
             c_from = chunk_start.strftime('%d/%m/%Y')
             c_to = chunk_end.strftime('%d/%m/%Y')
             page = 1
             start = 0
-            limit = 1000
+            limit = PAGE_LIMIT
+            try:
+                while not stop_event.is_set():
+                    params = {
+                        'con_date': 2,
+                        'date_from': c_from,
+                        'date_to': c_to,
+                        'report_type': report_type,
+                        'page': page,
+                        'start': start,
+                        'limit': limit,
+                    }
+                    body = client.get_report_page(params, timeout=60)
 
-            while True:
+                    if isinstance(body, dict):
+                        records = body.get('arr_data', body.get('data', []))
+                        total = body.get('total', body.get('totalCount', 0))
+                    else:
+                        records = body
+                        total = len(body)
+
+                    event_queue.put(('page', chunk_idx, page, records, int(total)))
+
+                    if not records or start + limit >= int(total):
+                        break
+                    page += 1
+                    start += limit
+            except Exception as e:
+                event_queue.put(('error', chunk_idx, str(e)))
+            finally:
+                event_queue.put(('chunk_done', chunk_idx))
+
+        executor = ThreadPoolExecutor(max_workers=min(PARALLEL_CHUNKS, total_chunks))
+        for idx, (cs, ce) in enumerate(chunks, 1):
+            executor.submit(fetch_one_chunk, idx, cs, ce)
+
+        fetched_count = 0
+        chunks_completed = 0
+        try:
+            while chunks_completed < total_chunks:
                 if time.monotonic() > deadline:
+                    stop_event.set()
                     yield f"event: error\ndata: {json.dumps({'error': 'Request timed out (เกิน 60 นาที) ลองเลือกช่วงวันที่สั้นลง'})}\n\n"
                     return
 
-                params = {
-                    'con_date': 2,
-                    'date_from': c_from,
-                    'date_to': c_to,
-                    'report_type': report_type,
-                    'page': page,
-                    'start': start,
-                    'limit': limit,
-                }
-
                 try:
-                    body = client.get_report_page(params, timeout=60)
-                except Exception as e:
+                    ev = event_queue.get(timeout=1.0)
+                except Empty:
+                    continue
+
+                kind = ev[0]
+                if kind == 'page':
+                    _, chunk_idx, page, records, total = ev
+                    fetched_count += len(records)
+                    if records:
+                        yield f"event: batch\ndata: {json.dumps({'records': records})}\n\n"
+                    yield f"event: progress\ndata: {json.dumps({'fetched': fetched_count, 'total': total, 'page': page, 'chunk': chunks_completed + 1, 'totalChunks': total_chunks})}\n\n"
+                elif kind == 'chunk_done':
+                    chunks_completed += 1
+                elif kind == 'error':
+                    _, chunk_idx, err = ev
+                    stop_event.set()
                     client._logged_in = False
-                    yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                    yield f"event: error\ndata: {json.dumps({'error': err})}\n\n"
                     return
-
-                if isinstance(body, dict):
-                    records = body.get('arr_data', body.get('data', []))
-                    total = body.get('total', body.get('totalCount', 0))
-                else:
-                    records = body
-                    total = len(body)
-
-                fetched_count += len(records)
-
-                if records:
-                    yield f"event: batch\ndata: {json.dumps({'records': records})}\n\n"
-
-                yield f"event: progress\ndata: {json.dumps({'fetched': fetched_count, 'total': total, 'page': page, 'chunk': chunk_idx, 'totalChunks': total_chunks})}\n\n"
-
-                if not records or start + limit >= int(total):
-                    break
-
-                page += 1
-                start += limit
+        finally:
+            stop_event.set()
+            executor.shutdown(wait=False)
 
         columns = COLUMN_MAP.get(report_type)
         yield f"event: done\ndata: {json.dumps({'total': fetched_count, 'columns': columns})}\n\n"

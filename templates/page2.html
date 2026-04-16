@@ -317,6 +317,7 @@
                                 formatter: (v, ctx) => {
                                     if (v === null || v === undefined) return '';
                                     if (def.key === 'score') {
+                                        if (!v) return '';
                                         return ['🥇', '🥈', '🥉'][ctx.dataIndex] || '';
                                     }
                                     if (def.unit === 'days') return fmtDays(v);
