@@ -27,7 +27,7 @@ def check_basic_auth(f):
         if not auth or auth.username != auth_user or auth.password != auth_pass:
             return Response(
                 'Login required.', 401,
-                {'WWW-Authenticate': 'Basic realm="SE Report"'},
+                {'WWW-Authenticate': 'Basic realm="SE Dashboard"'},
             )
         return f(*args, **kwargs)
     return decorated

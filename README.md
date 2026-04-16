@@ -16,10 +16,12 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 ### Data Pipeline
 
 - **SSE streaming fetch** — ดึงข้อมูลแบบ pagination อัตโนมัติพร้อม progress bar + ปุ่ม Cancel
-- **Date range chunking** — แบ่ง date range ใหญ่ ๆ เป็น chunks ละ 14 วัน (`CHUNK_DAYS`) ป้องกัน server-side read timeout เมื่อ query ช่วงยาว
+- **Date range chunking** — แบ่ง date range ใหญ่ ๆ เป็น chunks ละ 30 วัน (`CHUNK_DAYS`) ป้องกัน server-side read timeout เมื่อ query ช่วงยาว
+- **Parallel chunk fetching** — ยิง 4 chunks พร้อมกัน (`PARALLEL_CHUNKS`) ด้วย `ThreadPoolExecutor` + thread-safe login lock + shared `Queue` สำหรับ SSE events → เร็วขึ้น ~2-3× (1 ปี ~6-7 นาที จาก ~10-12 นาที)
 - **Batch streaming** — ส่ง records ทีละ page ผ่าน `event: batch` แทนการรวมทั้งหมดส่งครั้งเดียว → กัน `RangeError: Invalid string length` ของ JS (string > 512MB)
+- **Backend field whitelist** — ตัด record ใน Flask ให้เหลือ 14 fields ที่ dashboard ใช้จริง (จาก ~48 fields) ก่อน yield SSE → ลด payload ~70% + memory browser ~75%
 - **Auto retry** — retry 3 ครั้งเมื่อเจอ 502/503/504
-- **Auto re-login** — ต่อ session ใหม่อัตโนมัติเมื่อ iSurvey หมดอายุระหว่างดึงข้อมูล
+- **Auto re-login** — ต่อ session ใหม่อัตโนมัติเมื่อ iSurvey หมดอายุระหว่างดึงข้อมูล (thread-safe ผ่าน `_login_lock`)
 - **Dedup** — ลบแถวซ้ำ (key: `survey_no` → `notify_no` → `claim_no`) เก็บแถวที่มีข้อมูลครบที่สุด
 - **Fill Supervisor** — เติมชื่อผู้ตรวจสอบงานอัตโนมัติ:
   - `survey_no` ขึ้นต้น `SEMS` / `SETP` → บังคับเป็น "นายสราวุธ บุญคุ้ม"
@@ -80,6 +82,7 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - เก็บ snapshot ของ `date_from`, `date_to`, `report_type` จาก FormData ตอน submit (กัน race condition)
 - กลับหน้า 1 → restore form + records + re-render ทันที ไม่ต้อง fetch ใหม่
 - เปลี่ยน report_type หรือ fetch ใหม่ → ล้าง/เขียนทับ cache อัตโนมัติ
+- **Pre-aggregated page2 stats** — คำนวณ `{stats, filteredCount}` ต่อ inspector ตั้งแต่หน้า 1 แล้วเก็บใน cache (2-20 KB ไม่ขึ้นกับจำนวน records) → page2 แสดงผลได้แม้ sessionStorage เต็ม (1-year fetch ที่ records ทะลุ quota 5MB ก็ยัง render chart ได้)
 
 ### Security
 
@@ -142,17 +145,31 @@ python app.py
 
 ## Configuration
 
-| Constant / ค่า        | Default | หมายเหตุ                                   |
-| --------------------- | ------- | ------------------------------------------ |
-| `CHUNK_DAYS`          | 14      | จำนวนวันสูงสุดต่อ 1 request ไป iSurvey     |
-| Per-request timeout   | 60s     | timeout ต่อ HTTP call                       |
-| Overall deadline      | 60 นาที | timeout รวมของ SSE stream                   |
-| Page size (`limit`)   | 1000    | records ต่อ page                            |
-| Max date range        | 730 วัน (2 ปี) | เกินนี้ backend ตอบ error               |
+| Constant / ค่า        | Default | หมายเหตุ                                                                |
+| --------------------- | ------- | ----------------------------------------------------------------------- |
+| `CHUNK_DAYS`          | 30      | จำนวนวันสูงสุดต่อ 1 chunk (1 HTTP request ต่อ page)                     |
+| `PAGE_LIMIT`          | 5000    | records ต่อ page (iSurvey รับได้ บางครั้ง override ส่งมาก/น้อยกว่า)     |
+| `PARALLEL_CHUNKS`     | 4       | ยิง chunks พร้อมกันสูงสุด (เกิน 4 iSurvey จะ reject ทดสอบแล้ว)          |
+| `KEEP_FIELDS`         | 14 fields | whitelist ฟิลด์ที่ dashboard ใช้จริง (strip ก่อน yield SSE ลด payload) |
+| Per-request timeout   | 60s     | timeout ต่อ HTTP call                                                    |
+| Overall deadline      | 60 นาที | timeout รวมของ SSE stream                                                |
+| Max date range        | 730 วัน (2 ปี) | เกินนี้ backend ตอบ error                                          |
+
+### Benchmarks (enquiry report, measured via browser)
+
+| Range | records | chunks | pages | เวลา   | Throughput |
+| ----- | ------- | ------ | ----- | ------ | ---------- |
+| 7d    | 1,358   | 1      | 1     | ~3s    | ~485 rec/s |
+| 30d   | 16,142  | 1      | 2     | ~36s   | ~450 rec/s |
+| 60d   | 34,118  | 2      | 4     | ~60s   | ~565 rec/s |
+| 240d  | 140,228 | 8      | 16    | ~242s  | ~578 rec/s |
+| 365d  | 206,264 | 13     | 25    | ~378s  | ~546 rec/s |
+
+iSurvey SQL เป็น bottleneck (throughput ค่อนข้างคงที่ ~400-580 rec/s) — การปรับปรุงหลักมาจาก parallel chunks + field strip ไม่ใช่ HTTP overhead
 
 ## Notes
 
 - Backend รองรับ 3 ประเภทรายงาน (enquiry / closeClaim / claim) — ปัจจุบัน UI ซ่อน toggle ไว้และใช้ `enquiry` เป็นค่าเริ่มต้น
 - ช่วงวันที่จำกัดไม่เกิน 2 ปี (backend จะ return error ถ้าเกิน)
 - Gunicorn timeout 600s สำหรับการดึงข้อมูลช่วงยาว
-- **ดึง 1 ปีขึ้นไป:** record อาจถึงหลักล้าน กินหน่วยความจำเบราว์เซอร์ >1GB — แนะนำแบ่งดึงทีละไตรมาสถ้าเจอปัญหา memory
+- **ดึง 1 ปี (~200k records):** หลัง parallel + field strip ใช้เวลา ~6-7 นาที, browser peak memory ~60-80 MB, `sessionStorage` quota เต็ม แต่ page2 ยัง render ได้ผ่าน pre-aggregated stats
