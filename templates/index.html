@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -77,6 +78,17 @@
         }
         .btn-fetch:hover { background: #2563eb; }
         .btn-fetch:disabled { background: #1e3a5f; color: #64748b; cursor: not-allowed; }
+
+        /* Export (icon) button */
+        .btn-export {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: clamp(28px, 2.4vw, 36px); height: clamp(28px, 2.4vw, 36px);
+            padding: 0; background: #16a34a; color: #fff; border: none;
+            border-radius: 8px; cursor: pointer; transition: background 0.15s, opacity 0.15s;
+        }
+        .btn-export:hover { background: #15803d; }
+        .btn-export:disabled { background: #334155; color: #64748b; cursor: not-allowed; opacity: 0.6; }
+        .btn-export svg { width: 60%; height: 60%; }
 
         /* Progress bar */
         .progress-container {
@@ -380,6 +392,7 @@
             .toolbar form .pill-group { flex: 1; }
             .toolbar form .pill-group label { flex: 1; text-align: center; }
             .btn-fetch { flex: none; padding: 6px 16px; font-size: 12px; order: 3; }
+            .btn-export { flex: none; order: 4; width: 30px; height: 30px; }
             #autoRefreshLabel { font-size: 11px; margin-left: 0; order: 5; }
             .toolbar-controls { margin-left: auto; order: 6; }
             .toolbar-controls button { width: 28px; height: 28px; }
@@ -434,10 +447,18 @@
                     <label for="rt_claim">Claim Report</label>
                 </div>
                 <button type="submit" class="btn-fetch" id="submitBtn">Fetch</button>
+                <button type="button" class="btn-export" id="exportBtn" title="Export inspector stats to Excel" aria-label="Export inspector stats to Excel" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                </button>
             </form>
             <label id="autoRefreshLabel" style="display:flex; align-items:center; gap:4px; font-size:clamp(10px, 0.9vw, 12px); color:#94a3b8; cursor:pointer; margin-left:4px; user-select:none; white-space:nowrap;">
                 <input type="checkbox" id="autoRefresh" style="accent-color:#3b82f6; width:15px; height:15px; cursor:pointer;">
                 Auto Refresh
+                <span id="autoRefreshCountdown" style="display:none; color:#3b82f6; font-variant-numeric:tabular-nums; font-weight:600; margin-left:2px;"></span>
             </label>
             <div class="toolbar-controls">
                 <select id="sortMode" title="เรียงการ์ดตาม">
@@ -767,15 +788,36 @@
                 document.getElementById('dashCards').innerHTML = '';
                 document.getElementById('dashCharts').innerHTML = '';
                 document.getElementById('inspectorCards').innerHTML = '';
+                document.getElementById('exportBtn').disabled = true;
                 destroyCharts();
             });
         });
 
         // ========== AUTO REFRESH ==========
+        const AUTO_REFRESH_MS = 5 * 60 * 1000;
         let autoRefreshTimer = null;
+        let autoRefreshTick = null;
+        let autoRefreshNext = 0;
         const autoRefreshCb = document.getElementById('autoRefresh');
+        const autoRefreshCountdown = document.getElementById('autoRefreshCountdown');
+        function fmtCountdown(ms) {
+            const s = Math.max(0, Math.ceil(ms / 1000));
+            const m = Math.floor(s / 60);
+            const r = s % 60;
+            return `(${m}:${String(r).padStart(2, '0')})`;
+        }
+        function renderCountdown() {
+            autoRefreshCountdown.textContent = fmtCountdown(autoRefreshNext - Date.now());
+        }
+        function scheduleAutoRefresh() {
+            autoRefreshNext = Date.now() + AUTO_REFRESH_MS;
+            renderCountdown();
+        }
         autoRefreshCb.addEventListener('change', () => {
             if (autoRefreshCb.checked) {
+                autoRefreshCountdown.style.display = '';
+                scheduleAutoRefresh();
+                autoRefreshTick = setInterval(renderCountdown, 1000);
                 autoRefreshTimer = setInterval(() => {
                     if (btn.disabled) return;
                     const t = todayStr();
@@ -785,10 +827,14 @@
                     if (document.getElementById('to_today').checked) {
                         document.getElementById('date_to').value = t;
                     }
+                    scheduleAutoRefresh();
                     form.requestSubmit();
-                }, 5 * 60 * 1000);
+                }, AUTO_REFRESH_MS);
             } else {
                 if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+                if (autoRefreshTick) { clearInterval(autoRefreshTick); autoRefreshTick = null; }
+                autoRefreshCountdown.style.display = 'none';
+                autoRefreshCountdown.textContent = '';
             }
         });
 
@@ -983,11 +1029,24 @@
 
             const MEDALS = ['🥇', '🥈', '🥉'];
             const MEDAL_CLASSES = ['medal-gold', 'medal-silver', 'medal-bronze'];
+            const medalValueFn = {
+                total: (s) => s.total,
+                completed: (s) => s.completed,
+                pending: (s) => s.pending,
+                pct: (s) => s.pct,
+                score: (s) => s.completed * s.pct,
+                name: () => 1,
+                dispatch_speed: (s) => Number.isFinite(s.dispatchSpeed) ? 1 : 0,
+                report_speed: (s) => Number.isFinite(s.reportSpeed) ? 1 : 0,
+            };
+            const medalValue = medalValueFn[sortMode] || medalValueFn.score;
             const medalMap = new Map();
             const medalClassMap = new Map();
             for (let idx = 0; idx < Math.min(3, nonEmpty.length); idx++) {
-                medalMap.set(nonEmpty[idx][0], MEDALS[idx]);
-                medalClassMap.set(nonEmpty[idx][0], MEDAL_CLASSES[idx]);
+                const name = nonEmpty[idx][0];
+                if (medalValue(statsMap.get(name)) <= 0) continue;
+                medalMap.set(name, MEDALS[idx]);
+                medalClassMap.set(name, MEDAL_CLASSES[idx]);
             }
 
             const grid = document.createElement('div');
@@ -1047,7 +1106,37 @@
             inspectorContainer.appendChild(grid);
 
             status.style.display = 'none';
+            document.getElementById('exportBtn').disabled = false;
         }
+
+        // ========== EXPORT TO EXCEL ==========
+        function exportInspectorsToExcel() {
+            if (!lastRecords || lastRecords.length === 0) return;
+            const rt = document.querySelector('input[name=report_type]:checked').value;
+            const empKey = rt === 'claim' ? 'empName' : rt === 'closeClaim' ? 'empname' : 'empcode';
+
+            const records = getDashFilteredRecords();
+            const headers = ['เลขเคลม', 'เลขเซอเวย์', 'พนักงานตรวจสอบ', 'ผู้ตรวจสอบงาน', 'สถานะงาน'];
+            const rows = records.map(r => ({
+                'เลขเคลม': r.claim_no || '',
+                'เลขเซอเวย์': r.survey_no || '',
+                'พนักงานตรวจสอบ': r[empKey] || '',
+                'ผู้ตรวจสอบงาน': r.checkByName || '',
+                'สถานะงาน': r.stt_desc || '',
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+            ws['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 28 }, { wch: 28 }, { wch: 16 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Claims');
+
+            const from = document.getElementById('date_from').value || '';
+            const to = document.getElementById('date_to').value || '';
+            const range = from && to ? `_${from}_${to}` : '';
+            XLSX.writeFile(wb, `claims_${rt}${range}.xlsx`);
+        }
+
+        document.getElementById('exportBtn').addEventListener('click', exportInspectorsToExcel);
 
         // ========== DEDUPLICATION ==========
         function fillSupervisor(records) {
@@ -1133,6 +1222,7 @@
             status.textContent = '';
             status.style.display = '';
             btn.disabled = true;
+            document.getElementById('exportBtn').disabled = true;
             lastRecords = null;
 
             progressFill.style.width = '0%';

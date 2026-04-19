@@ -66,10 +66,13 @@
         }
         .chart-wrap canvas { max-width: 100% !important; }
 
-        /* Floating Action Button — back to index */
-        #fabBack {
+        /* Floating Action Buttons */
+        #fabGroup {
             position: fixed; right: clamp(16px, 2vw, 32px); bottom: clamp(16px, 2vw, 32px);
             z-index: 100;
+            display: flex; gap: 12px;
+        }
+        #fabGroup a {
             width: clamp(48px, 4.2vw, 64px); height: clamp(48px, 4.2vw, 64px);
             border-radius: 50%;
             background: #3b82f6; color: #fff;
@@ -77,9 +80,9 @@
             box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
             text-decoration: none; transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
         }
-        #fabBack svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
-        #fabBack:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
-        #fabBack:active { transform: translateY(0); }
+        #fabGroup a svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
+        #fabGroup a:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+        #fabGroup a:active { transform: translateY(0); }
     </style>
 </head>
 <body>
@@ -89,11 +92,18 @@
     </header>
     <div id="content"></div>
 
-    <a href="/" id="fabBack" title="กลับหน้าแรก" aria-label="กลับหน้าแรก">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
-            <polyline points="15 18 9 12 15 6"/>
-        </svg>
-    </a>
+    <div id="fabGroup">
+        <a href="/" id="fabBack" title="กลับหน้าแรก" aria-label="กลับหน้าแรก">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+        </a>
+        <a href="/page3" id="fabNext" title="ไปหน้าถัดไป" aria-label="ไปหน้าถัดไป">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                <polyline points="9 18 15 12 9 6"/>
+            </svg>
+        </a>
+    </div>
 
     <script>
         Chart.register(ChartDataLabels);

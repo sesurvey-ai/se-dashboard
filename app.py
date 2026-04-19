@@ -334,6 +334,12 @@ def page2():
     return render_template('page2.html')
 
 
+@app.route('/page3')
+@check_basic_auth
+def page3():
+    return render_template('page3.html')
+
+
 @app.route('/fetch', methods=['POST'])
 @check_basic_auth
 def fetch():

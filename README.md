@@ -40,6 +40,7 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - การ์ดรายผู้ตรวจสอบงาน (checkByName) เรียงตามโหมดที่เลือก
 - แสดง Total / Completed / Pending + progress bar ต่อคน (Pending ใช้สีม่วง)
 - 3 อันดับแรกติดเหรียญ 🥇🥈🥉 + **กรอบเรืองแสงพัลส์** + **ลูกไฟวิ่งรอบกรอบ** (conic-gradient หมุนด้วย `@property --angle`) ปรับ tone เงินเข้มอัตโนมัติเมื่อสลับเป็น light mode
+- **ซ่อนเหรียญเมื่อคะแนน = 0** — ถ้า top-3 มีคะแนน 0 (เช่นทุกคน Completed = 0 ในโหมด `score`) จะไม่มอบเหรียญ เพื่อไม่ให้เข้าใจผิดว่ามีผู้นำ
 - ใช้สูตร `minmax(min(100%, 420px), 1fr)` → responsive ตั้งแต่ desktop ถึงมือถือโดยไม่ต้องใช้ media query
 - `align-items: start` → การ์ด "(ว่าง)" ที่สูงกว่าไม่ยืดการ์ดเพื่อนในแถวเดียวกัน
 - การ์ด "(ว่าง)" รวมงานที่ไม่มีผู้ตรวจสอบ พร้อมรายชื่อพนักงาน (empcode) จัดกลุ่มตามจำนวน — ต่อท้ายสุดเสมอ
@@ -59,10 +60,10 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 
 - **Date range From/To** พร้อม checkbox `Today`
   - ติ๊ก Today → ล็อค field ให้เป็นวันปัจจุบัน และ Auto Refresh จะ re-set เป็นวันปัจจุบันในแต่ละรอบ (แก้ปัญหาหน้าเว็บเปิดค้างข้ามคืน)
-- **Auto Refresh** — ดึงข้อมูลใหม่ทุก 5 นาที (เช็ค Today-lock ก่อน submit)
+- **Auto Refresh** — ดึงข้อมูลใหม่ทุก 5 นาที (เช็ค Today-lock ก่อน submit) + **countdown (m:ss)** ข้างเช็คบ็อกซ์ แสดงเวลาที่เหลือจนถึง refresh ครั้งถัดไป
 - **Theme toggle** — Dark / Light (จำค่าใน localStorage)
 - **Sort dropdown + Info tooltip** — เลือกวิธีเรียง Inspector Cards + hover ปุ่ม `?` ดูสูตรและเงื่อนไขของแต่ละโหมด
-- **Floating Action Button** — ปุ่มวงกลมมุมขวาล่าง ไปหน้า `/page2`
+- **Floating Action Buttons** — ปุ่มวงกลมมุมขวาล่าง นำทางระหว่าง `/` → `/page2` → `/page3` (page2 มีปุ่ม prev/next, page3 มีปุ่ม prev)
 
 ### Page 2 — Inspector Rankings Charts
 
@@ -74,6 +75,16 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - กราฟ speed ทั้ง 2 แสดงผลเป็น **จำนวนวัน** (`<1 วัน` ทศนิยม 2 ตำแหน่ง, `≥10 วัน` ปัดเต็ม)
 - Responsive grid: 3 cols → 2 cols (≤1100px) → 1 col (≤720px) พร้อม `clamp()` font sizing
 - Auto-sync เมื่อข้อมูลหน้า 1 เปลี่ยน (`pageshow` event + เทียบ `saved_at` timestamp)
+
+### Page 3 — Inspection Duration Buckets
+
+- **การ์ดผู้ตรวจสอบ** แสดง breakdown เคส "จบงาน" ตามระยะเวลา `dispatch_dt → checker_dt`
+  - Bucket: `≤24h = 1 วัน`, `24-48h = 2 วัน`, ... คลัมป์ที่ `7+ วัน`
+  - แต่ละ bucket มีแถบสัดส่วน + จำนวนเคส (เรียง 1 วัน → มากสุดลงไป)
+  - สีแถบไล่โทน: เขียว (1d) → เหลือง (2d) → ส้ม (3-4d) → แดง (7+d)
+- **Footer** แต่ละการ์ด: เฉลี่ยรวม (วัน) + จำนวนเคสจบงานที่ไม่มี `dispatch_dt`/`checker_dt`
+- **Sort modes**: จำนวนจบงาน (default) / เร็วเฉลี่ย / ช้าเฉลี่ย / ชื่อ — top 3 ติดเหรียญ (ยกเว้นโหมด "ชื่อ")
+- **ต้องใช้ records เต็มใน cache** (ไม่ใช่แค่ page2_stats) เพราะต้องนับ bucket แยกเคส — ถ้า cache ไม่มี records จะบอกผู้ใช้ให้ลด date range แล้ว Fetch ใหม่
 
 ### Session Cache (survive navigation)
 
@@ -96,7 +107,8 @@ se-dashboard/
 ├── mapping_supervisor_staff_.json  # Supervisor → Staff mapping (reverse lookup)
 ├── templates/
 │   ├── index.html                  # Frontend (Dashboard UI + session cache)
-│   └── page2.html                  # Inspector Rankings — 6 bar charts per report
+│   ├── page2.html                  # Inspector Rankings — 6 bar charts per report
+│   └── page3.html                  # Inspection duration buckets per inspector
 ├── requirements.txt                # Python dependencies
 ├── .gitignore
 └── .env                            # Environment variables (not tracked)
@@ -130,6 +142,7 @@ python app.py
 | --------------- | ------ | ------------------------------------------------- |
 | `/`             | GET    | Dashboard UI                                      |
 | `/page2`        | GET    | Inspector Rankings — 6 bar charts (reads sessionStorage cache) |
+| `/page3`        | GET    | Inspection duration buckets per inspector (reads sessionStorage cache) |
 | `/fetch-stream` | POST   | SSE streaming fetch (pagination + progress)      |
 | `/fetch`        | POST   | Non-streaming fetch (single response)            |
 

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SE Dashboard — Page 3 (Inspection Duration)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { overflow-x: hidden; max-width: 100%; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #0f172a; color: #e2e8f0;
+            min-height: 100vh;
+            padding: clamp(16px, 2vw, 32px) clamp(12px, 2.2vw, 36px) clamp(80px, 8vw, 112px);
+            font-size: clamp(14px, 1.05vw, 17px);
+        }
+        header {
+            display: flex; justify-content: space-between; align-items: baseline;
+            gap: clamp(12px, 1.5vw, 24px); flex-wrap: wrap;
+            margin-bottom: clamp(14px, 1.6vw, 24px);
+        }
+        h1 { font-size: clamp(24px, 2.2vw, 36px); font-weight: 800; letter-spacing: 1px; }
+        header .meta { color: #94a3b8; font-size: clamp(13px, 1.05vw, 17px); font-variant-numeric: tabular-nums; }
+        header .meta b { color: #e2e8f0; }
+
+        .toolbar {
+            display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+            margin-bottom: clamp(12px, 1.4vw, 20px);
+        }
+        .toolbar label { color: #94a3b8; font-size: clamp(12px, 1vw, 14px); }
+        .toolbar select {
+            background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+            border-radius: 8px; padding: 6px 10px; font-size: clamp(13px, 1vw, 15px);
+            cursor: pointer;
+        }
+
+        .empty { text-align: center; padding: clamp(48px, 6vw, 96px) 20px; }
+        .empty p { color: #94a3b8; margin-bottom: 20px; font-size: clamp(15px, 1.15vw, 18px); }
+        .empty a.back {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: clamp(9px, 0.9vw, 12px) clamp(16px, 1.6vw, 24px);
+            background: #3b82f6; color: #fff;
+            border-radius: 8px; text-decoration: none; font-weight: 600;
+            font-size: clamp(14px, 1.05vw, 17px);
+        }
+        .empty a.back:hover { background: #2563eb; }
+
+        .inspector-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
+            gap: 14px;
+        }
+        .inspector-card {
+            background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+            padding: 16px 20px; transition: border-color 0.15s;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .inspector-card:hover { border-color: #3b82f6; }
+        .card-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding-bottom: 8px; border-bottom: 1px solid #334155;
+        }
+        .card-head .name {
+            font-weight: 700; font-size: clamp(14px, 1.1vw, 17px); color: #e2e8f0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .card-head .tally {
+            font-size: clamp(11px, 0.9vw, 13px); color: #94a3b8; white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .card-head .tally .num { color: #22c55e; font-weight: 700; }
+
+        .bucket-list {
+            display: grid; gap: 6px;
+        }
+        .bucket-row {
+            display: grid; grid-template-columns: 70px 1fr 70px;
+            align-items: center; gap: 10px;
+            font-size: clamp(12px, 0.95vw, 14px);
+            font-variant-numeric: tabular-nums;
+        }
+        .bucket-row .lbl { color: #cbd5e1; }
+        .bucket-row .cnt { color: #94a3b8; text-align: right; }
+        .bucket-row .cnt b { color: #e2e8f0; font-weight: 700; }
+        .bar-outer {
+            height: 10px; background: #0f172a; border-radius: 4px; overflow: hidden;
+            min-width: 0;
+        }
+        .bar-inner {
+            height: 100%; border-radius: 4px; transition: width 0.3s;
+        }
+        /* Shade buckets: green→yellow→orange→red by duration */
+        .bucket-row.b-fast  .bar-inner { background: #22c55e; }
+        .bucket-row.b-ok    .bar-inner { background: #84cc16; }
+        .bucket-row.b-mid   .bar-inner { background: #f59e0b; }
+        .bucket-row.b-slow  .bar-inner { background: #f97316; }
+        .bucket-row.b-late  .bar-inner { background: #ef4444; }
+
+        .card-foot {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 12px; padding-top: 8px; border-top: 1px dashed #334155;
+            font-size: clamp(11px, 0.88vw, 13px); color: #94a3b8;
+            font-variant-numeric: tabular-nums;
+        }
+        .card-foot b { color: #e2e8f0; }
+
+        .no-completed {
+            text-align: center; color: #64748b; padding: 12px 0;
+            font-size: clamp(12px, 0.95vw, 14px);
+        }
+
+        /* Medal glow (top 3) */
+        .inspector-card.medal-gold   { border-color: #fbbf24; box-shadow: 0 0 0 2px rgba(251,191,36,0.25); }
+        .inspector-card.medal-silver { border-color: #cbd5e1; box-shadow: 0 0 0 2px rgba(203,213,225,0.25); }
+        .inspector-card.medal-bronze { border-color: #d97706; box-shadow: 0 0 0 2px rgba(217,119,6,0.25); }
+
+        /* Floating Action Buttons */
+        #fabGroup {
+            position: fixed; right: clamp(16px, 2vw, 32px); bottom: clamp(16px, 2vw, 32px);
+            z-index: 100;
+            display: flex; gap: 12px;
+        }
+        #fabGroup a {
+            width: clamp(48px, 4.2vw, 64px); height: clamp(48px, 4.2vw, 64px);
+            border-radius: 50%;
+            background: #3b82f6; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+            text-decoration: none; transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+        #fabGroup a svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
+        #fabGroup a:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+        #fabGroup a:active { transform: translateY(0); }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>⏱️ ระยะเวลาตรวจงาน (จบงาน)</h1>
+        <div class="meta" id="meta"></div>
+    </header>
+    <div class="toolbar" id="toolbar" style="display:none;">
+        <label for="sortMode">เรียงตาม</label>
+        <select id="sortMode">
+            <option value="completed">จำนวนจบงาน (มาก→น้อย)</option>
+            <option value="fast">เร็วเฉลี่ย</option>
+            <option value="slow">ช้าเฉลี่ย</option>
+            <option value="name">ชื่อ</option>
+        </select>
+    </div>
+    <div id="content"></div>
+
+    <div id="fabGroup">
+        <a href="/page2" id="fabPrev" title="หน้าก่อนหน้า" aria-label="หน้าก่อนหน้า">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+        </a>
+    </div>
+
+    <script>
+        const content = document.getElementById('content');
+        const meta = document.getElementById('meta');
+        const toolbar = document.getElementById('toolbar');
+        const sortSelect = document.getElementById('sortMode');
+
+        const DAY_MS = 86400000;
+        const MAX_BUCKET = 7; // explicit buckets 1..7; anything > becomes "7+"
+        let lastSavedAt = null;
+        let currentStats = [];
+
+        function readCache() {
+            try { return JSON.parse(sessionStorage.getItem('se_cache') || 'null'); }
+            catch (e) { return null; }
+        }
+
+        function fmtThDate(s) {
+            if (!s) return '';
+            const d = new Date(s);
+            if (isNaN(d)) return s;
+            const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+            return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear() + 543}`;
+        }
+
+        function stripTitle(s) {
+            return String(s || '').replace(/^(นางสาว|น\.ส\.|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '').trim();
+        }
+
+        function parseDT(s) {
+            if (!s) return null;
+            const str = String(s).trim();
+            if (!str) return null;
+            const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+            if (m) {
+                let [, d, mo, y, h, mi, se] = m;
+                y = parseInt(y, 10);
+                if (y > 2400) y -= 543;
+                const dt = new Date(y, parseInt(mo, 10) - 1, parseInt(d, 10),
+                    h ? parseInt(h, 10) : 0, mi ? parseInt(mi, 10) : 0, se ? parseInt(se, 10) : 0);
+                return isNaN(dt) ? null : dt.getTime();
+            }
+            const iso = Date.parse(str);
+            return isNaN(iso) ? null : iso;
+        }
+
+        function durationBucket(ms) {
+            // Any duration ≤ 24h → "1 วัน"; 24-48h → "2 วัน"; ... clamp at MAX_BUCKET+
+            const days = Math.max(1, Math.ceil(ms / DAY_MS));
+            return Math.min(days, MAX_BUCKET + 1);
+        }
+
+        function bucketClass(d) {
+            if (d <= 1) return 'b-fast';
+            if (d === 2) return 'b-ok';
+            if (d <= 4) return 'b-mid';
+            if (d <= MAX_BUCKET) return 'b-slow';
+            return 'b-late';
+        }
+
+        function bucketLabel(d) {
+            return d > MAX_BUCKET ? `${MAX_BUCKET}+ วัน` : `${d} วัน`;
+        }
+
+        function computeStatsFromRecords(records, rt) {
+            const inspectorKey = rt === 'claim' ? 'empName' : rt === 'closeClaim' ? 'empname' : 'checkByName';
+            const filtered = records.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
+            const groups = {};
+            filtered.forEach(r => {
+                const name = stripTitle(r[inspectorKey]) || '(ว่าง)';
+                if (name === '(ว่าง)') return;
+                (groups[name] = groups[name] || []).push(r);
+            });
+            return Object.entries(groups).map(([name, recs]) => {
+                const completedRecs = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน');
+                const buckets = new Map();
+                let missing = 0;
+                let totalMs = 0, timedCount = 0;
+                completedRecs.forEach(r => {
+                    const a = parseDT(r.dispatch_dt), b = parseDT(r.checker_dt);
+                    if (a === null || b === null || b <= a) {
+                        missing++;
+                        return;
+                    }
+                    const d = durationBucket(b - a);
+                    buckets.set(d, (buckets.get(d) || 0) + 1);
+                    totalMs += (b - a);
+                    timedCount++;
+                });
+                return {
+                    name,
+                    total: recs.length,
+                    completed: completedRecs.length,
+                    buckets,
+                    missing,
+                    avgDays: timedCount > 0 ? (totalMs / timedCount) / DAY_MS : null,
+                };
+            });
+        }
+
+        function sortStats(stats, mode) {
+            const arr = [...stats];
+            if (mode === 'name') {
+                arr.sort((a, b) => a.name.localeCompare(b.name, 'th'));
+            } else if (mode === 'completed') {
+                arr.sort((a, b) => b.completed - a.completed);
+            } else {
+                const dir = mode === 'slow' ? -1 : 1;
+                arr.sort((a, b) => {
+                    const va = a.avgDays, vb = b.avgDays;
+                    if (va === null && vb === null) return 0;
+                    if (va === null) return 1;
+                    if (vb === null) return -1;
+                    return (va - vb) * dir;
+                });
+            }
+            return arr;
+        }
+
+        function medalScore(stat, mode) {
+            if (mode === 'completed') return stat.completed;
+            if (mode === 'fast' || mode === 'slow') return stat.avgDays !== null ? 1 : 0;
+            return 0; // name mode: no medals
+        }
+
+        function renderCards(stats, sortMode) {
+            content.innerHTML = '';
+            if (!stats.length) {
+                content.innerHTML = '<div class="empty"><p>ไม่พบผู้ตรวจสอบในข้อมูลนี้</p></div>';
+                return;
+            }
+            const sorted = sortStats(stats, sortMode);
+
+            const MEDAL_CLASSES = ['medal-gold', 'medal-silver', 'medal-bronze'];
+            const MEDALS = ['🥇', '🥈', '🥉'];
+            const medalClass = new Map();
+            const medalEmoji = new Map();
+            for (let i = 0; i < Math.min(3, sorted.length); i++) {
+                if (medalScore(sorted[i], sortMode) <= 0) continue;
+                medalClass.set(sorted[i].name, MEDAL_CLASSES[i]);
+                medalEmoji.set(sorted[i].name, MEDALS[i]);
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'inspector-grid';
+            sorted.forEach(s => {
+                const card = document.createElement('div');
+                const mc = medalClass.get(s.name);
+                card.className = mc ? `inspector-card ${mc}` : 'inspector-card';
+
+                const emoji = medalEmoji.get(s.name) || '';
+                const nameHtml = `${emoji ? emoji + ' ' : ''}${s.name}`;
+
+                let bucketsHtml;
+                if (s.completed === 0) {
+                    bucketsHtml = '<div class="no-completed">ยังไม่มีเคสจบงาน</div>';
+                } else if (s.buckets.size === 0) {
+                    bucketsHtml = '<div class="no-completed">จบงานแล้วแต่ไม่มีข้อมูลวันที่</div>';
+                } else {
+                    const maxCount = Math.max(...s.buckets.values());
+                    const sortedBuckets = [...s.buckets.entries()].sort((a, b) => a[0] - b[0]);
+                    bucketsHtml = '<div class="bucket-list">' + sortedBuckets.map(([d, n]) => {
+                        const pct = maxCount > 0 ? (n / maxCount) * 100 : 0;
+                        return `
+                            <div class="bucket-row ${bucketClass(d)}">
+                                <span class="lbl">${bucketLabel(d)}</span>
+                                <div class="bar-outer"><div class="bar-inner" style="width:${pct.toFixed(1)}%"></div></div>
+                                <span class="cnt"><b>${n}</b> เรื่อง</span>
+                            </div>
+                        `;
+                    }).join('') + '</div>';
+                }
+
+                const avgStr = s.avgDays !== null ? `${s.avgDays.toFixed(1)} วัน` : '—';
+                const footHtml = s.completed > 0
+                    ? `<div class="card-foot">
+                           <span>เฉลี่ย: <b>${avgStr}</b></span>
+                           <span>ไม่มีวันที่: <b>${s.missing}</b> เคส</span>
+                       </div>`
+                    : '';
+
+                card.innerHTML = `
+                    <div class="card-head">
+                        <div class="name">${nameHtml}</div>
+                        <div class="tally">จบ <span class="num">${s.completed}</span> / ${s.total}</div>
+                    </div>
+                    ${bucketsHtml}
+                    ${footHtml}
+                `;
+                grid.appendChild(card);
+            });
+            content.appendChild(grid);
+        }
+
+        function syncView() {
+            const cache = readCache();
+            const savedAt = cache && cache.saved_at ? cache.saved_at : null;
+            if (savedAt === lastSavedAt && currentStats.length) {
+                renderCards(currentStats, sortSelect.value);
+                return;
+            }
+            lastSavedAt = savedAt;
+            content.innerHTML = '';
+            meta.innerHTML = '';
+
+            const hasRecords = cache && cache.records && cache.records.length;
+            if (!cache || !hasRecords) {
+                toolbar.style.display = 'none';
+                const msg = cache && cache.page2_stats && cache.page2_stats.length
+                    ? 'หน้านี้ต้องใช้ records แบบเต็ม — ให้ลด date range แล้ว Fetch ใหม่'
+                    : 'ยังไม่มีข้อมูล — กลับไปกด Fetch ที่หน้าแรกก่อน';
+                content.innerHTML = `
+                    <div class="empty">
+                        <p>${msg}</p>
+                        <a class="back" href="/">← กลับหน้าแรก</a>
+                    </div>`;
+                return;
+            }
+
+            const rt = cache.report_type || 'enquiry';
+            currentStats = computeStatsFromRecords(cache.records, rt);
+
+            const rtLabel = { enquiry: 'Enquiry', claim: 'Claim Report', closeClaim: 'Close Claim' }[rt] || rt;
+            const totalRecs = currentStats.reduce((s, x) => s + x.total, 0);
+            const totalCompleted = currentStats.reduce((s, x) => s + x.completed, 0);
+            meta.innerHTML = `
+                <b>${rtLabel}</b> &nbsp;·&nbsp;
+                ${fmtThDate(cache.date_from)} → ${fmtThDate(cache.date_to)} &nbsp;·&nbsp;
+                ${totalRecs.toLocaleString()} records &nbsp;·&nbsp;
+                จบงาน ${totalCompleted.toLocaleString()} &nbsp;·&nbsp;
+                ${currentStats.length} inspectors
+            `;
+            toolbar.style.display = '';
+            renderCards(currentStats, sortSelect.value);
+        }
+
+        sortSelect.addEventListener('change', () => renderCards(currentStats, sortSelect.value));
+        syncView();
+        window.addEventListener('pageshow', syncView);
+    </script>
+</body>
+</html>
