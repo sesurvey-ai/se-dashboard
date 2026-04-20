@@ -131,9 +131,33 @@
         #fabGroup a svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
         #fabGroup a:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
         #fabGroup a:active { transform: translateY(0); }
+
+        /* Light theme overrides */
+        body.light { background: #f1f5f9; color: #1e293b; }
+        body.light header .meta { color: #64748b; }
+        body.light header .meta b { color: #1e293b; }
+        body.light .toolbar label { color: #64748b; }
+        body.light .toolbar select { background: #f8fafc; color: #1e293b; border-color: #cbd5e1; }
+        body.light .empty p { color: #64748b; }
+        body.light .inspector-card { background: #fff; border-color: #e2e8f0; }
+        body.light .inspector-card:hover { border-color: #3b82f6; }
+        body.light .card-head { border-bottom-color: #e2e8f0; }
+        body.light .card-head .name { color: #1e293b; }
+        body.light .card-head .tally { color: #64748b; }
+        body.light .card-head .tally .num { color: #16a34a; }
+        body.light .bucket-row .lbl { color: #475569; }
+        body.light .bucket-row .cnt { color: #64748b; }
+        body.light .bucket-row .cnt b { color: #1e293b; }
+        body.light .bar-outer { background: #e2e8f0; }
+        body.light .card-foot { border-top-color: #e2e8f0; color: #64748b; }
+        body.light .card-foot b { color: #1e293b; }
+        body.light .no-completed { color: #94a3b8; }
+        body.light #fabGroup a { box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25); }
+        body.light #fabGroup a:hover { box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35); }
     </style>
 </head>
 <body>
+<script>if (localStorage.getItem('se_theme') === 'light') document.body.classList.add('light');</script>
     <header>
         <h1>⏱️ ระยะเวลาตรวจงาน (จบงาน)</h1>
         <div class="meta" id="meta"></div>

@@ -63,14 +63,15 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - **Auto Refresh** — ดึงข้อมูลใหม่ทุก 5 นาที (เช็ค Today-lock ก่อน submit) + **countdown (m:ss)** ข้างเช็คบ็อกซ์ แสดงเวลาที่เหลือจนถึง refresh ครั้งถัดไป
 - **Theme toggle** — Dark / Light (จำค่าใน localStorage)
 - **Sort dropdown + Info tooltip** — เลือกวิธีเรียง Inspector Cards + hover ปุ่ม `?` ดูสูตรและเงื่อนไขของแต่ละโหมด
-- **Floating Action Buttons** — ปุ่มวงกลมมุมขวาล่าง นำทางระหว่าง `/` → `/page2` → `/page3` (page2 มีปุ่ม prev/next, page3 มีปุ่ม prev)
+- **Mapping button** — ปุ่มไอคอนสีม่วงในแถบเครื่องมือ → ไปหน้าแก้ไข supervisor/staff mapping (`/page4`)
+- **Floating Action Buttons** — ปุ่มวงกลมมุมขวาล่าง นำทางระหว่าง `/` → `/page2` → `/page3` (page2 มีปุ่ม prev/next, page3 มีปุ่ม prev, page4 มีปุ่มกากบาท ✕ กลับหน้าแรก)
 
 ### Page 2 — Inspector Rankings Charts
 
 - **6 กราฟแท่งแนวนอน** ต่อ 1 report ใช้ข้อมูลจาก `sessionStorage` ไม่ต้อง fetch ซ้ำ
   - แถวบน: 🏆 คะแนนรวม · 🚀 จบงานเร็ว (วันจ่าย→ตรวจ) · 📝 จบงานเร็ว (ส่งรายงาน→ตรวจ)
   - แถวล่าง: 📦 จำนวนเคสทั้งหมด · ✅ จบงาน · ⏳ งานค้าง
-- แท่ง top-3 ใช้สี **ทอง/เงิน/ทองแดง** เหมือนเหรียญ ที่เหลือเป็นเทา
+- แท่ง top-3 ใช้ **linear gradient ทอง/เงิน/ทองแดง** (อ่อน→เข้ม ขยายเต็มความกว้างของแต่ละแท่ง ผ่าน `beforeDraw` plugin) — สั้นหรือยาวก็ไล่สีเท่ากัน; ที่เหลือเป็นเทาโปร่งแสง
 - กราฟ `score` แสดง 🥇🥈🥉 แทนตัวเลข + ซ่อน tick แกน X (เน้นที่อันดับ ไม่ใช่ค่า)
 - กราฟ speed ทั้ง 2 แสดงผลเป็น **จำนวนวัน** (`<1 วัน` ทศนิยม 2 ตำแหน่ง, `≥10 วัน` ปัดเต็ม)
 - Responsive grid: 3 cols → 2 cols (≤1100px) → 1 col (≤720px) พร้อม `clamp()` font sizing
@@ -85,6 +86,20 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - **Footer** แต่ละการ์ด: เฉลี่ยรวม (วัน) + จำนวนเคสจบงานที่ไม่มี `dispatch_dt`/`checker_dt`
 - **Sort modes**: จำนวนจบงาน (default) / เร็วเฉลี่ย / ช้าเฉลี่ย / ชื่อ — top 3 ติดเหรียญ (ยกเว้นโหมด "ชื่อ")
 - **ต้องใช้ records เต็มใน cache** (ไม่ใช่แค่ page2_stats) เพราะต้องนับ bucket แยกเคส — ถ้า cache ไม่มี records จะบอกผู้ใช้ให้ลด date range แล้ว Fetch ใหม่
+
+### Page 4 — Supervisor / Staff Mapping Editor
+
+- **ตารางแก้ไข mapping** — หัวคอลัมน์เป็นชื่อ "ผู้ตรวจสอบงาน" พนักงานในทีมเป็นแถว
+- **แก้ไขได้ครบทั้งสามมิติ** — เพิ่ม/ลบ/เปลี่ยนชื่อคอลัมน์ (ผู้ตรวจ), เพิ่ม/ลบ/แก้ไขพนักงาน, แถวว่างท้ายคอลัมน์พร้อมขยายอัตโนมัติเมื่อเริ่มพิมพ์
+- **บันทึก / โหลดใหม่** — REST endpoints `/api/mapping` (GET/POST) อ่าน/เขียนไฟล์ `mapping_supervisor_staff_.json` พร้อม `threading.Lock` กัน concurrent write + ทริกเกอร์ reload `STAFF_SUPERVISOR_MAP` ทันทีไม่ต้อง restart
+- **UX protections** — ปุ่มบันทึก disabled เมื่อไม่มีการแก้ไข, เตือนก่อนปิดหน้าเมื่อยังไม่ save, ยืนยันก่อนลบคอลัมน์ที่มีข้อมูล, `beforeunload` warning
+- **Keyboard shortcut**: `Cmd/Ctrl + S` → บันทึก
+
+### Light / Dark Theme
+
+- Toggle ที่หน้าแรก → เก็บค่าใน `localStorage['se_theme']`
+- **ทุกหน้า** (`/`, `/page2`, `/page3`, `/page4`) อ่านค่าธีมเดียวกัน → ธีมสม่ำเสมอทั้ง app
+- กราฟ Chart.js ใช้สีแกน/grid ตามธีมปัจจุบันตอน render
 
 ### Session Cache (survive navigation)
 
@@ -108,7 +123,8 @@ se-dashboard/
 ├── templates/
 │   ├── index.html                  # Frontend (Dashboard UI + session cache)
 │   ├── page2.html                  # Inspector Rankings — 6 bar charts per report
-│   └── page3.html                  # Inspection duration buckets per inspector
+│   ├── page3.html                  # Inspection duration buckets per inspector
+│   └── page4.html                  # Supervisor/Staff mapping editor (writes back to JSON)
 ├── requirements.txt                # Python dependencies
 ├── .gitignore
 └── .env                            # Environment variables (not tracked)
@@ -143,6 +159,9 @@ python app.py
 | `/`             | GET    | Dashboard UI                                      |
 | `/page2`        | GET    | Inspector Rankings — 6 bar charts (reads sessionStorage cache) |
 | `/page3`        | GET    | Inspection duration buckets per inspector (reads sessionStorage cache) |
+| `/page4`        | GET    | Supervisor/Staff mapping editor                  |
+| `/api/mapping`  | GET    | คืนค่า `mapping_supervisor_staff_.json` ทั้งไฟล์ (JSON) |
+| `/api/mapping`  | POST   | บันทึก mapping ใหม่ (JSON body) + reload in-memory map |
 | `/fetch-stream` | POST   | SSE streaming fetch (pagination + progress)      |
 | `/fetch`        | POST   | Non-streaming fetch (single response)            |
 

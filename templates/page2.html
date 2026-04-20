@@ -83,9 +83,20 @@
         #fabGroup a svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
         #fabGroup a:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
         #fabGroup a:active { transform: translateY(0); }
+
+        /* Light theme overrides */
+        body.light { background: #f1f5f9; color: #1e293b; }
+        body.light header .meta { color: #64748b; }
+        body.light header .meta b { color: #1e293b; }
+        body.light .empty p { color: #64748b; }
+        body.light .chart-card { background: #fff; border-color: #e2e8f0; }
+        body.light .chart-card h2 { color: #1e293b; }
+        body.light #fabGroup a { box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25); }
+        body.light #fabGroup a:hover { box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35); }
     </style>
 </head>
 <body>
+<script>if (localStorage.getItem('se_theme') === 'light') document.body.classList.add('light');</script>
     <header>
         <h1>📊 Inspector Rankings</h1>
         <div class="meta" id="meta"></div>
@@ -107,6 +118,49 @@
 
     <script>
         Chart.register(ChartDataLabels);
+
+        // Per-bar gradient plugin — spans each bar's own width so short bars
+        // get the same light→dark progression as long ones. Runs after layout
+        // (positions known) and writes a gradient array into dataset.backgroundColor.
+        const MEDAL_STOPS = [
+            ['#fef3c7', '#fde047', '#f59e0b'],  // 🥇
+            ['#f8fafc', '#e2e8f0', '#94a3b8'],  // 🥈
+            ['#fed7aa', '#f97316', '#9a3412'],  // 🥉
+        ];
+        const medalGradientPlugin = {
+            id: 'medalGradient',
+            beforeDraw(chart) {
+                const meta = chart.getDatasetMeta(0);
+                if (!meta || !meta.data || !meta.data.length) return;
+                const ctx = chart.ctx;
+                meta.data.forEach((bar, i) => {
+                    if (!bar || !bar.options) return;
+                    if (i >= 3) {
+                        bar.options.backgroundColor = 'rgba(100,116,139,0.25)';
+                        return;
+                    }
+                    const fallback = i === 0 ? '#fbbf24' : i === 1 ? '#cbd5e1' : '#d97706';
+                    try {
+                        const p = bar.getProps(['x', 'base'], true);
+                        const left = Math.min(p.x, p.base);
+                        const right = Math.max(p.x, p.base);
+                        if (!isFinite(left) || !isFinite(right) || right - left < 1) {
+                            bar.options.backgroundColor = fallback;
+                            return;
+                        }
+                        const g = ctx.createLinearGradient(left, 0, right, 0);
+                        const [a, b, c] = MEDAL_STOPS[i];
+                        g.addColorStop(0, a);
+                        g.addColorStop(0.55, b);
+                        g.addColorStop(1, c);
+                        bar.options.backgroundColor = g;
+                    } catch (e) {
+                        bar.options.backgroundColor = fallback;
+                    }
+                });
+            },
+        };
+        Chart.register(medalGradientPlugin);
 
         const content = document.getElementById('content');
         const meta = document.getElementById('meta');
@@ -300,7 +354,7 @@
                         datasets: [{
                             data: values,
                             backgroundColor: data.map((_, i) =>
-                                i === 0 ? '#fbbf24' : i === 1 ? '#cbd5e1' : i === 2 ? '#d97706' : '#64748b'
+                                i === 0 ? '#fbbf24' : i === 1 ? '#cbd5e1' : i === 2 ? '#d97706' : 'rgba(100,116,139,0.25)'
                             ),
                             borderRadius: 4,
                         }],
@@ -325,7 +379,7 @@
                             datalabels: {
                                 anchor: 'end',
                                 align: 'right',
-                                color: '#e2e8f0',
+                                color: document.body.classList.contains('light') ? '#1e293b' : '#e2e8f0',
                                 font: (ctx) => def.key === 'score'
                                     ? { size: 24, weight: '700' }
                                     : { size: 13, weight: '700' },
@@ -345,14 +399,14 @@
                             x: {
                                 ticks: {
                                     display: def.key !== 'score',
-                                    color: '#94a3b8',
+                                    color: document.body.classList.contains('light') ? '#64748b' : '#94a3b8',
                                     font: { size: 12 },
                                     callback: (v) => def.unit === 'days' ? fmtDays(v) : v,
                                 },
-                                grid: { color: 'rgba(148,163,184,0.1)' },
+                                grid: { color: document.body.classList.contains('light') ? 'rgba(71,85,105,0.12)' : 'rgba(148,163,184,0.1)' },
                             },
                             y: {
-                                ticks: { color: '#e2e8f0', font: { size: 13 }, autoSkip: false },
+                                ticks: { color: document.body.classList.contains('light') ? '#1e293b' : '#e2e8f0', font: { size: 13 }, autoSkip: false },
                                 grid: { display: false },
                             },
                         },

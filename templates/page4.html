@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SE Dashboard — Page 4 (Supervisor / Staff Mapping)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { max-width: 100%; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #0f172a; color: #e2e8f0;
+            min-height: 100vh;
+            padding: clamp(16px, 2vw, 32px) clamp(12px, 2.2vw, 36px) clamp(80px, 8vw, 112px);
+            font-size: clamp(14px, 1.05vw, 17px);
+        }
+        header {
+            display: flex; justify-content: space-between; align-items: baseline;
+            gap: clamp(12px, 1.5vw, 24px); flex-wrap: wrap;
+            margin-bottom: clamp(14px, 1.6vw, 24px);
+        }
+        h1 { font-size: clamp(22px, 2.2vw, 34px); font-weight: 800; letter-spacing: 1px; }
+        header .meta { color: #94a3b8; font-size: clamp(13px, 1.05vw, 17px); font-variant-numeric: tabular-nums; }
+        header .meta b { color: #e2e8f0; }
+
+        .toolbar {
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            margin-bottom: clamp(12px, 1.4vw, 20px);
+        }
+        .btn {
+            padding: 8px 16px; font-size: clamp(13px, 1vw, 15px); font-weight: 600;
+            border-radius: 8px; border: none; cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+        }
+        .btn-primary { background: #3b82f6; color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-primary:disabled { background: #1e3a5f; color: #64748b; cursor: not-allowed; }
+        .btn-secondary { background: #334155; color: #e2e8f0; }
+        .btn-secondary:hover { background: #475569; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-success { background: #16a34a; color: #fff; }
+        .btn-success:hover { background: #15803d; }
+
+        .save-status {
+            color: #94a3b8; font-size: clamp(12px, 0.95vw, 14px);
+            margin-left: auto;
+        }
+        .save-status.saved { color: #22c55e; }
+        .save-status.error { color: #f87171; }
+        .save-status.dirty { color: #f59e0b; }
+
+        .table-wrap {
+            overflow: auto; border: 1px solid #334155; border-radius: 12px;
+            background: #1e293b;
+            max-height: calc(100vh - 230px);
+        }
+        table.mapping {
+            border-collapse: separate; border-spacing: 0;
+            width: max-content; min-width: 100%;
+        }
+        table.mapping th,
+        table.mapping td {
+            border-right: 1px solid #334155;
+            border-bottom: 1px solid #334155;
+            vertical-align: top;
+            padding: 0;
+        }
+        table.mapping th:last-child,
+        table.mapping td:last-child { border-right: none; }
+
+        table.mapping thead th {
+            position: sticky; top: 0;
+            background: #0f172a;
+            color: #e2e8f0;
+            text-align: left;
+            min-width: 280px;
+            padding: 10px 12px 10px 12px;
+            z-index: 2;
+        }
+        table.mapping thead .head-row {
+            display: flex; align-items: center; gap: 8px;
+        }
+        table.mapping thead .head-name {
+            flex: 1;
+            background: transparent; color: #f1f5f9;
+            border: 1px solid transparent; border-radius: 6px;
+            padding: 6px 8px; font-size: clamp(13px, 1.05vw, 16px);
+            font-weight: 700;
+            outline: none;
+        }
+        table.mapping thead .head-name:hover,
+        table.mapping thead .head-name:focus { border-color: #3b82f6; background: #1e293b; }
+        table.mapping thead .count {
+            color: #94a3b8; font-size: 12px; font-weight: 500;
+            white-space: nowrap;
+        }
+        table.mapping thead .icon-btn {
+            background: transparent; border: none; color: #94a3b8;
+            cursor: pointer; padding: 4px; border-radius: 4px;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        table.mapping thead .icon-btn:hover { color: #f87171; background: #1e293b; }
+        table.mapping thead .icon-btn svg { width: 16px; height: 16px; }
+
+        table.mapping tbody td {
+            background: #1e293b;
+            padding: 4px 8px;
+        }
+        table.mapping tbody tr:hover td { background: #273449; }
+
+        .cell-row {
+            display: flex; align-items: center; gap: 6px;
+            min-height: 30px;
+        }
+        .cell-input {
+            flex: 1;
+            background: transparent; color: #e2e8f0;
+            border: 1px solid transparent; border-radius: 6px;
+            padding: 4px 6px; font-size: clamp(12px, 0.95vw, 14px);
+            outline: none; width: 100%;
+            font-family: inherit;
+        }
+        .cell-input:hover { border-color: #334155; }
+        .cell-input:focus { border-color: #3b82f6; background: #0f172a; }
+        .cell-input.empty { color: #64748b; }
+        .cell-del {
+            background: transparent; border: none; color: transparent;
+            cursor: pointer; padding: 2px 4px; border-radius: 4px;
+            display: inline-flex; transition: color 0.15s;
+        }
+        tr:hover .cell-del { color: #64748b; }
+        .cell-del:hover { color: #f87171; }
+        .cell-del svg { width: 14px; height: 14px; }
+
+        .row-num {
+            background: #0f172a !important;
+            color: #64748b; font-size: 11px;
+            text-align: center;
+            min-width: 40px; width: 40px;
+            font-variant-numeric: tabular-nums;
+            padding: 4px 0 !important;
+            position: sticky; left: 0; z-index: 1;
+        }
+        table.mapping thead th.corner {
+            min-width: 40px; width: 40px; left: 0; z-index: 3;
+            background: #0f172a;
+            position: sticky;
+        }
+
+        .add-row-btn-cell {
+            background: #0f172a !important;
+            text-align: center; padding: 6px !important;
+        }
+        .add-col-btn {
+            background: #1e293b; border: 1px dashed #475569; border-radius: 6px;
+            color: #94a3b8; cursor: pointer;
+            padding: 8px 12px; font-size: 13px; font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .add-col-btn:hover { color: #3b82f6; border-color: #3b82f6; }
+
+        .empty-state {
+            text-align: center; padding: clamp(48px, 6vw, 96px) 20px;
+            color: #94a3b8;
+        }
+
+        /* Floating Action Buttons */
+        #fabGroup {
+            position: fixed; right: clamp(16px, 2vw, 32px); bottom: clamp(16px, 2vw, 32px);
+            z-index: 100;
+            display: flex; gap: 12px;
+        }
+        #fabGroup a {
+            width: clamp(48px, 4.2vw, 64px); height: clamp(48px, 4.2vw, 64px);
+            border-radius: 50%;
+            background: #3b82f6; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+            text-decoration: none; transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+        #fabGroup a svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
+        #fabGroup a:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+        #fabGroup a:active { transform: translateY(0); }
+
+        /* Light theme overrides */
+        body.light { background: #f1f5f9; color: #1e293b; }
+        body.light header .meta { color: #64748b; }
+        body.light header .meta b { color: #1e293b; }
+        body.light .btn-secondary { background: #e2e8f0; color: #1e293b; }
+        body.light .btn-secondary:hover { background: #cbd5e1; }
+        body.light .save-status { color: #64748b; }
+        body.light .save-status.saved { color: #15803d; }
+        body.light .save-status.error { color: #dc2626; }
+        body.light .save-status.dirty { color: #b45309; }
+        body.light .table-wrap { background: #fff; border-color: #e2e8f0; }
+        body.light table.mapping th,
+        body.light table.mapping td { border-right-color: #e2e8f0; border-bottom-color: #e2e8f0; }
+        body.light table.mapping thead th { background: #f1f5f9; color: #1e293b; }
+        body.light table.mapping thead .head-name { color: #1e293b; }
+        body.light table.mapping thead .head-name:hover,
+        body.light table.mapping thead .head-name:focus { background: #fff; border-color: #3b82f6; }
+        body.light table.mapping thead .count { color: #64748b; }
+        body.light table.mapping thead .icon-btn { color: #64748b; }
+        body.light table.mapping thead .icon-btn:hover { color: #dc2626; background: #fff; }
+        body.light table.mapping tbody td { background: #fff; }
+        body.light table.mapping tbody tr:hover td { background: #f8fafc; }
+        body.light .cell-input { color: #1e293b; }
+        body.light .cell-input:hover { border-color: #e2e8f0; }
+        body.light .cell-input:focus { background: #f8fafc; border-color: #3b82f6; }
+        body.light .cell-input.empty { color: #94a3b8; }
+        body.light .cell-del { color: transparent; }
+        body.light tr:hover .cell-del { color: #94a3b8; }
+        body.light .cell-del:hover { color: #dc2626; }
+        body.light .row-num { background: #f1f5f9 !important; color: #94a3b8; }
+        body.light table.mapping thead th.corner { background: #f1f5f9; }
+        body.light .add-row-btn-cell { background: #f1f5f9 !important; }
+        body.light .add-col-btn { background: #f8fafc; border-color: #cbd5e1; color: #64748b; }
+        body.light .add-col-btn:hover { color: #3b82f6; border-color: #3b82f6; }
+        body.light .empty-state { color: #64748b; }
+        body.light .modal { background: #fff; border-color: #e2e8f0; }
+        body.light .modal p { color: #475569; }
+        body.light #fabGroup a { box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25); }
+        body.light #fabGroup a:hover { box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35); }
+
+        /* Modal confirm */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            display: none; align-items: center; justify-content: center;
+            z-index: 200;
+        }
+        .modal-backdrop.active { display: flex; }
+        .modal {
+            background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+            padding: 24px; max-width: 420px; width: calc(100% - 32px);
+        }
+        .modal h3 { margin-bottom: 12px; font-size: 18px; }
+        .modal p { color: #cbd5e1; margin-bottom: 20px; line-height: 1.5; font-size: 14px; }
+        .modal .actions { display: flex; justify-content: flex-end; gap: 8px; }
+    </style>
+</head>
+<body>
+<script>if (localStorage.getItem('se_theme') === 'light') document.body.classList.add('light');</script>
+    <header>
+        <h1>🧭 ผู้ตรวจสอบงาน / พนักงาน</h1>
+        <div class="meta" id="meta"></div>
+    </header>
+
+    <div class="toolbar">
+        <button class="btn btn-primary" id="btnSave" disabled>💾 บันทึก</button>
+        <button class="btn btn-secondary" id="btnReload">↻ โหลดใหม่</button>
+        <span class="save-status" id="saveStatus"></span>
+    </div>
+
+    <div id="content" class="table-wrap">
+        <div class="empty-state">กำลังโหลด…</div>
+    </div>
+
+    <div class="modal-backdrop" id="confirmModal">
+        <div class="modal">
+            <h3 id="confirmTitle">ยืนยัน</h3>
+            <p id="confirmMsg">ดำเนินการต่อ?</p>
+            <div class="actions">
+                <button class="btn btn-secondary" id="confirmCancel">ยกเลิก</button>
+                <button class="btn btn-danger" id="confirmOk">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="fabGroup">
+        <a href="/" id="fabClose" title="ปิดและกลับหน้าแรก" aria-label="ปิดและกลับหน้าแรก">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </a>
+    </div>
+
+    <script>
+        const content = document.getElementById('content');
+        const meta = document.getElementById('meta');
+        const btnSave = document.getElementById('btnSave');
+        const btnReload = document.getElementById('btnReload');
+        const saveStatus = document.getElementById('saveStatus');
+
+        // In-memory state: array of [supervisor, staffArray] preserving column order
+        let state = [];
+        let dirty = false;
+
+        function setDirty(v) {
+            dirty = v;
+            btnSave.disabled = !v;
+            if (v) {
+                saveStatus.textContent = '● มีการแก้ไขที่ยังไม่ได้บันทึก';
+                saveStatus.className = 'save-status dirty';
+            } else {
+                saveStatus.textContent = '';
+                saveStatus.className = 'save-status';
+            }
+        }
+
+        function updateMeta() {
+            const sup = state.length;
+            const staff = state.reduce((s, [, arr]) => s + arr.length, 0);
+            meta.innerHTML = `<b>${sup}</b> ผู้ตรวจสอบงาน · <b>${staff}</b> พนักงาน`;
+        }
+
+        async function loadData() {
+            saveStatus.textContent = 'กำลังโหลด…';
+            saveStatus.className = 'save-status';
+            try {
+                const res = await fetch('/api/mapping');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                state = Object.entries(data).map(([sup, arr]) => [sup, Array.isArray(arr) ? [...arr] : []]);
+                render();
+                setDirty(false);
+                updateMeta();
+            } catch (e) {
+                content.innerHTML = `<div class="empty-state">โหลดข้อมูลไม่สำเร็จ: ${escapeHtml(e.message)}</div>`;
+                saveStatus.textContent = 'โหลดไม่สำเร็จ';
+                saveStatus.className = 'save-status error';
+            }
+        }
+
+        async function saveData() {
+            btnSave.disabled = true;
+            saveStatus.textContent = 'กำลังบันทึก…';
+            saveStatus.className = 'save-status';
+            const payload = {};
+            for (const [sup, arr] of state) {
+                const key = (sup || '').trim();
+                if (!key) continue;
+                payload[key] = arr.map(s => (s || '').trim()).filter(Boolean);
+            }
+            try {
+                const res = await fetch('/api/mapping', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const body = await res.json();
+                if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+                setDirty(false);
+                saveStatus.textContent = `✓ บันทึกแล้ว · ${body.supervisors} ผู้ตรวจสอบ · ${body.staff} พนักงาน`;
+                saveStatus.className = 'save-status saved';
+                setTimeout(() => {
+                    if (!dirty) { saveStatus.textContent = ''; saveStatus.className = 'save-status'; }
+                }, 3500);
+            } catch (e) {
+                btnSave.disabled = false;
+                saveStatus.textContent = `บันทึกไม่สำเร็จ: ${e.message}`;
+                saveStatus.className = 'save-status error';
+            }
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({
+                '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+            }[c]));
+        }
+
+        function render() {
+            if (state.length === 0) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <p style="margin-bottom: 16px;">ยังไม่มีผู้ตรวจสอบงาน</p>
+                        <button class="btn btn-primary" onclick="addColumn()">+ เพิ่มผู้ตรวจสอบงาน</button>
+                    </div>`;
+                return;
+            }
+
+            const maxRows = Math.max(...state.map(([, arr]) => arr.length));
+            const rowCount = maxRows + 1; // +1 for trailing empty row
+
+            const table = document.createElement('table');
+            table.className = 'mapping';
+
+            // Header
+            const thead = document.createElement('thead');
+            const trh = document.createElement('tr');
+            const corner = document.createElement('th');
+            corner.className = 'corner';
+            corner.textContent = '#';
+            trh.appendChild(corner);
+
+            state.forEach(([sup, arr], colIdx) => {
+                const th = document.createElement('th');
+                th.innerHTML = `
+                    <div class="head-row">
+                        <input class="head-name" data-col="${colIdx}" value="${escapeHtml(sup)}" placeholder="ชื่อผู้ตรวจสอบงาน">
+                        <span class="count">(${arr.length})</span>
+                        <button class="icon-btn" data-del-col="${colIdx}" title="ลบคอลัมน์">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                <path d="M10 11v6M14 11v6"/>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+                trh.appendChild(th);
+            });
+
+            // Add-column trailing header cell
+            const thAdd = document.createElement('th');
+            thAdd.style.minWidth = '180px';
+            thAdd.innerHTML = `<button class="add-col-btn" id="btnAddCol">+ เพิ่มผู้ตรวจสอบงาน</button>`;
+            trh.appendChild(thAdd);
+
+            thead.appendChild(trh);
+            table.appendChild(thead);
+
+            // Body
+            const tbody = document.createElement('tbody');
+            for (let r = 0; r < rowCount; r++) {
+                const tr = document.createElement('tr');
+                const rn = document.createElement('td');
+                rn.className = 'row-num';
+                rn.textContent = r + 1;
+                tr.appendChild(rn);
+
+                state.forEach(([, arr], colIdx) => {
+                    const td = document.createElement('td');
+                    const val = arr[r] || '';
+                    td.innerHTML = `
+                        <div class="cell-row">
+                            <input class="cell-input ${val ? '' : 'empty'}" data-col="${colIdx}" data-row="${r}" value="${escapeHtml(val)}" placeholder="เพิ่มพนักงาน…">
+                            <button class="cell-del" data-del-cell data-col="${colIdx}" data-row="${r}" title="ลบแถวนี้">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"/>
+                                    <line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                    tr.appendChild(td);
+                });
+
+                // Empty cell in add-col column
+                const padTd = document.createElement('td');
+                padTd.style.background = '#0f172a';
+                tr.appendChild(padTd);
+
+                tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+
+            content.innerHTML = '';
+            content.appendChild(table);
+
+            // Bind events
+            content.querySelectorAll('.head-name').forEach(inp => {
+                inp.addEventListener('input', onHeadInput);
+                inp.addEventListener('blur', onHeadBlur);
+            });
+            content.querySelectorAll('[data-del-col]').forEach(btn => {
+                btn.addEventListener('click', onDeleteColumn);
+            });
+            content.querySelectorAll('.cell-input').forEach(inp => {
+                inp.addEventListener('input', onCellInput);
+                inp.addEventListener('blur', onCellBlur);
+            });
+            content.querySelectorAll('[data-del-cell]').forEach(btn => {
+                btn.addEventListener('click', onDeleteCell);
+            });
+            const addBtn = document.getElementById('btnAddCol');
+            if (addBtn) addBtn.addEventListener('click', addColumn);
+
+            updateMeta();
+        }
+
+        function onHeadInput(e) {
+            const col = +e.target.dataset.col;
+            state[col][0] = e.target.value;
+            setDirty(true);
+        }
+        function onHeadBlur(e) {
+            const col = +e.target.dataset.col;
+            state[col][0] = e.target.value.trim();
+            e.target.value = state[col][0];
+        }
+
+        function onCellInput(e) {
+            const col = +e.target.dataset.col;
+            const row = +e.target.dataset.row;
+            const val = e.target.value;
+            const arr = state[col][1];
+            while (arr.length <= row) arr.push('');
+            const wasEmpty = (arr[row] || '') === '';
+            const nowEmpty = val === '';
+            arr[row] = val;
+            e.target.classList.toggle('empty', nowEmpty);
+            setDirty(true);
+            // If user just typed in a brand-new trailing row, re-render to get a new blank row
+            if (wasEmpty && !nowEmpty && row === Math.max(...state.map(([, a]) => a.length)) - 1) {
+                render();
+                const next = content.querySelector(`.cell-input[data-col="${col}"][data-row="${row}"]`);
+                if (next) {
+                    next.focus();
+                    next.setSelectionRange(next.value.length, next.value.length);
+                }
+            }
+        }
+        function onCellBlur(e) {
+            const col = +e.target.dataset.col;
+            const row = +e.target.dataset.row;
+            const arr = state[col][1];
+            if (row < arr.length) {
+                arr[row] = (arr[row] || '').trim();
+                e.target.value = arr[row];
+                e.target.classList.toggle('empty', arr[row] === '');
+            }
+        }
+
+        function onDeleteCell(e) {
+            const btn = e.currentTarget;
+            const col = +btn.dataset.col;
+            const row = +btn.dataset.row;
+            const arr = state[col][1];
+            if (row >= arr.length) return;
+            arr.splice(row, 1);
+            setDirty(true);
+            render();
+        }
+
+        async function onDeleteColumn(e) {
+            const col = +e.currentTarget.dataset.col;
+            const [sup, arr] = state[col];
+            if (arr.length > 0) {
+                const ok = await confirmDialog(
+                    'ลบคอลัมน์?',
+                    `ยืนยันลบ "${sup || '(ไม่มีชื่อ)'}" พร้อมพนักงาน ${arr.length} คน?`
+                );
+                if (!ok) return;
+            }
+            state.splice(col, 1);
+            setDirty(true);
+            render();
+        }
+
+        function addColumn() {
+            state.push(['', []]);
+            setDirty(true);
+            render();
+            const inputs = content.querySelectorAll('.head-name');
+            const last = inputs[inputs.length - 1];
+            if (last) last.focus();
+        }
+
+        // Confirm modal
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmTitle = document.getElementById('confirmTitle');
+        const confirmMsg = document.getElementById('confirmMsg');
+        const confirmOk = document.getElementById('confirmOk');
+        const confirmCancel = document.getElementById('confirmCancel');
+        let confirmResolver = null;
+
+        function confirmDialog(title, msg) {
+            confirmTitle.textContent = title;
+            confirmMsg.textContent = msg;
+            confirmModal.classList.add('active');
+            return new Promise(resolve => { confirmResolver = resolve; });
+        }
+        function closeConfirm(ok) {
+            confirmModal.classList.remove('active');
+            if (confirmResolver) { confirmResolver(ok); confirmResolver = null; }
+        }
+        confirmOk.addEventListener('click', () => closeConfirm(true));
+        confirmCancel.addEventListener('click', () => closeConfirm(false));
+        confirmModal.addEventListener('click', e => {
+            if (e.target === confirmModal) closeConfirm(false);
+        });
+
+        // Toolbar wiring
+        btnSave.addEventListener('click', saveData);
+        btnReload.addEventListener('click', async () => {
+            if (dirty) {
+                const ok = await confirmDialog('โหลดใหม่?', 'ทิ้งการแก้ไขที่ยังไม่ได้บันทึก?');
+                if (!ok) return;
+            }
+            loadData();
+        });
+
+        // Warn on unload if dirty
+        window.addEventListener('beforeunload', e => {
+            if (dirty) { e.preventDefault(); e.returnValue = ''; }
+        });
+
+        // Keyboard shortcut: Cmd/Ctrl+S
+        window.addEventListener('keydown', e => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                if (dirty) saveData();
+            }
+        });
+
+        loadData();
+    </script>
+</body>
+</html>

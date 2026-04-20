@@ -340,6 +340,69 @@ def page3():
     return render_template('page3.html')
 
 
+@app.route('/page4')
+@check_basic_auth
+def page4():
+    return render_template('page4.html')
+
+
+def _reload_mapping():
+    global STAFF_SUPERVISOR_MAP
+    new_map = {}
+    if os.path.exists(_mapping_path):
+        with open(_mapping_path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        for supervisor, staff_list in data.items():
+            for staff in staff_list:
+                new_map[staff.strip()] = supervisor.strip()
+    STAFF_SUPERVISOR_MAP = new_map
+
+
+_mapping_lock = threading.Lock()
+
+
+@app.route('/api/mapping', methods=['GET'])
+@check_basic_auth
+def api_mapping_get():
+    if not os.path.exists(_mapping_path):
+        return jsonify({})
+    with open(_mapping_path, encoding='utf-8') as fh:
+        return jsonify(json.load(fh))
+
+
+@app.route('/api/mapping', methods=['POST'])
+@check_basic_auth
+def api_mapping_save():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'รูปแบบข้อมูลไม่ถูกต้อง'}), 400
+
+    cleaned = {}
+    for supervisor, staff_list in payload.items():
+        sup = str(supervisor or '').strip()
+        if not sup:
+            continue
+        if not isinstance(staff_list, list):
+            return jsonify({'error': f'ข้อมูลของ "{sup}" ต้องเป็น list'}), 400
+        seen = set()
+        items = []
+        for staff in staff_list:
+            name = str(staff or '').strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            items.append(name)
+        cleaned[sup] = items
+
+    with _mapping_lock:
+        with open(_mapping_path, 'w', encoding='utf-8') as fh:
+            json.dump(cleaned, fh, ensure_ascii=False, indent=2)
+        _reload_mapping()
+
+    return jsonify({'ok': True, 'supervisors': len(cleaned),
+                    'staff': sum(len(v) for v in cleaned.values())})
+
+
 @app.route('/fetch', methods=['POST'])
 @check_basic_auth
 def fetch():

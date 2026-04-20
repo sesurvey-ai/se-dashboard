@@ -90,6 +90,18 @@
         .btn-export:disabled { background: #334155; color: #64748b; cursor: not-allowed; opacity: 0.6; }
         .btn-export svg { width: 60%; height: 60%; }
 
+        /* Mapping (icon) button — navigates to /page4 */
+        .btn-mapping {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: clamp(28px, 2.4vw, 36px); height: clamp(28px, 2.4vw, 36px);
+            padding: 0; background: #7c3aed; color: #fff; border: none;
+            border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.3s;
+            text-decoration: none;
+        }
+        .btn-mapping:hover { background: #6d28d9; }
+        .btn-mapping:hover svg { transform: rotate(180deg); }
+        .btn-mapping svg { width: 60%; height: 60%; transition: transform 0.5s; }
+
         /* Progress bar */
         .progress-container {
             display: none; align-items: center; gap: 12px; margin-bottom: 12px;
@@ -393,6 +405,7 @@
             .toolbar form .pill-group label { flex: 1; text-align: center; }
             .btn-fetch { flex: none; padding: 6px 16px; font-size: 12px; order: 3; }
             .btn-export { flex: none; order: 4; width: 30px; height: 30px; }
+            .btn-mapping { flex: none; order: 4; width: 30px; height: 30px; }
             #autoRefreshLabel { font-size: 11px; margin-left: 0; order: 5; }
             .toolbar-controls { margin-left: auto; order: 6; }
             .toolbar-controls button { width: 28px; height: 28px; }
@@ -454,6 +467,14 @@
                         <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                 </button>
+                <a href="/page4" class="btn-mapping" id="mappingBtn" title="แก้ไขผู้ตรวจสอบงาน / พนักงาน" aria-label="แก้ไขผู้ตรวจสอบงาน / พนักงาน">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
+                        <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>
+                    </svg>
+                </a>
             </form>
             <label id="autoRefreshLabel" style="display:flex; align-items:center; gap:4px; font-size:clamp(10px, 0.9vw, 12px); color:#94a3b8; cursor:pointer; margin-left:4px; user-select:none; white-space:nowrap;">
                 <input type="checkbox" id="autoRefresh" style="accent-color:#3b82f6; width:15px; height:15px; cursor:pointer;">
