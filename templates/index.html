@@ -1160,6 +1160,16 @@
         document.getElementById('exportBtn').addEventListener('click', exportInspectorsToExcel);
 
         // ========== DEDUPLICATION ==========
+        const SE_CODE_RE = /\bSEC?\d+/i;
+        const SUPERVISOR_BY_CODE = (() => {
+            const m = {};
+            for (const key in STAFF_SUPERVISOR) {
+                const c = String(key).match(SE_CODE_RE);
+                if (c) m[c[0].toUpperCase()] = STAFF_SUPERVISOR[key];
+            }
+            return m;
+        })();
+
         function fillSupervisor(records) {
             records.forEach(r => {
                 const sn = String(r.survey_no || '').trim().toUpperCase();
@@ -1174,6 +1184,13 @@
                 if (!STAFF_SUPERVISOR || Object.keys(STAFF_SUPERVISOR).length === 0) return;
                 const staff = r.empcode && String(r.empcode).trim();
                 if (!staff) return;
+
+                const codeMatch = staff.match(SE_CODE_RE);
+                if (codeMatch) {
+                    const sup = SUPERVISOR_BY_CODE[codeMatch[0].toUpperCase()];
+                    if (sup) { r.checkByName = sup; return; }
+                }
+
                 if (STAFF_SUPERVISOR[staff]) {
                     r.checkByName = STAFF_SUPERVISOR[staff];
                     return;
