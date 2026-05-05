@@ -386,21 +386,27 @@
             meta.innerHTML = '';
 
             const hasRecords = cache && cache.records && cache.records.length;
-            if (!cache || !hasRecords) {
+            const hasPage3Stats = cache && cache.page3_stats && cache.page3_stats.length;
+            if (!cache || (!hasRecords && !hasPage3Stats)) {
                 toolbar.style.display = 'none';
-                const msg = cache && cache.page2_stats && cache.page2_stats.length
-                    ? 'หน้านี้ต้องใช้ records แบบเต็ม — ให้ลด date range แล้ว Fetch ใหม่'
-                    : 'ยังไม่มีข้อมูล — กลับไปกด Fetch ที่หน้าแรกก่อน';
                 content.innerHTML = `
                     <div class="empty">
-                        <p>${msg}</p>
+                        <p>ยังไม่มีข้อมูล — กลับไปกด Fetch ที่หน้าแรกก่อน</p>
                         <a class="back" href="/">← กลับหน้าแรก</a>
                     </div>`;
                 return;
             }
 
             const rt = cache.report_type || 'enquiry';
-            currentStats = computeStatsFromRecords(cache.records, rt);
+            if (hasRecords) {
+                currentStats = computeStatsFromRecords(cache.records, rt);
+            } else {
+                // Rehydrate pre-aggregated stats; buckets were serialized as a plain object.
+                currentStats = cache.page3_stats.map(s => ({
+                    ...s,
+                    buckets: new Map(Object.entries(s.buckets || {}).map(([k, v]) => [parseInt(k, 10), v])),
+                }));
+            }
 
             const rtLabel = { enquiry: 'Enquiry', claim: 'Claim Report', closeClaim: 'Close Claim' }[rt] || rt;
             const totalRecs = currentStats.reduce((s, x) => s + x.total, 0);

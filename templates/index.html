@@ -634,10 +634,113 @@
             });
             return { stats, filteredCount: filtered.length };
         }
+        // Pre-aggregate page3 inspection-duration buckets so /page3 also survives
+        // large fetches that drop records from sessionStorage. Buckets are stored
+        // as a plain object (Map isn't JSON-serializable) and rehydrated on /page3.
+        function computePage3Stats(records, report_type) {
+            const inspectorKey = report_type === 'claim' ? 'empName'
+                : report_type === 'closeClaim' ? 'empname' : 'checkByName';
+            const DAY_MS = 86400000;
+            const MAX_BUCKET = 7;
+            const stripT = (s) => String(s || '').replace(/^(นางสาว|น\.ส\.|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '').trim();
+            const parseT = (s) => {
+                if (!s) return null;
+                const str = String(s).trim();
+                if (!str) return null;
+                const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+                if (m) {
+                    let [, d, mo, y, h, mi, se] = m;
+                    y = parseInt(y, 10);
+                    if (y > 2400) y -= 543;
+                    const dt = new Date(y, parseInt(mo, 10) - 1, parseInt(d, 10),
+                        h ? parseInt(h, 10) : 0, mi ? parseInt(mi, 10) : 0, se ? parseInt(se, 10) : 0);
+                    return isNaN(dt) ? null : dt.getTime();
+                }
+                const iso = Date.parse(str);
+                return isNaN(iso) ? null : iso;
+            };
+            const filtered = records.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
+            const groups = {};
+            filtered.forEach(r => {
+                const name = stripT(r[inspectorKey]) || '(ว่าง)';
+                if (name === '(ว่าง)') return;
+                (groups[name] = groups[name] || []).push(r);
+            });
+            return Object.entries(groups).map(([name, recs]) => {
+                const completedRecs = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน');
+                const buckets = {};
+                let missing = 0, totalMs = 0, timedCount = 0;
+                completedRecs.forEach(r => {
+                    const a = parseT(r.dispatch_dt), b = parseT(r.checker_dt);
+                    if (a === null || b === null || b <= a) { missing++; return; }
+                    const days = Math.max(1, Math.ceil((b - a) / DAY_MS));
+                    const d = Math.min(days, MAX_BUCKET + 1);
+                    buckets[d] = (buckets[d] || 0) + 1;
+                    totalMs += (b - a);
+                    timedCount++;
+                });
+                return {
+                    name,
+                    total: recs.length,
+                    completed: completedRecs.length,
+                    buckets,
+                    missing,
+                    avgDays: timedCount > 0 ? (totalMs / timedCount) / DAY_MS : null,
+                };
+            });
+        }
+        // Records can be 200k+ rows on yearly fetches — too big for sessionStorage's
+        // ~5MB quota. Records live in IndexedDB (effectively unbounded); meta and
+        // pre-aggregated page2/page3 stats stay in sessionStorage for sync access.
+        const IDB_NAME = 'se_dashboard';
+        const IDB_STORE = 'cache';
+        const IDB_RECORDS_KEY = 'records';
+        function idbOpen() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(IDB_NAME, 1);
+                req.onupgradeneeded = (e) => e.target.result.createObjectStore(IDB_STORE);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+        async function idbPut(key, value) {
+            const db = await idbOpen();
+            try {
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).put(value, key);
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                });
+            } finally { db.close(); }
+        }
+        async function idbGet(key) {
+            const db = await idbOpen();
+            try {
+                return await new Promise((resolve, reject) => {
+                    const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            } finally { db.close(); }
+        }
+        async function idbDelete(key) {
+            const db = await idbOpen();
+            try {
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).delete(key);
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                });
+            } finally { db.close(); }
+        }
+
         function saveCache(snapshot) {
             if (!lastRecords) return;
             const rt = snapshot?.report_type ?? document.querySelector('input[name=report_type]:checked').value;
             const page2 = computePage2Stats(lastRecords, rt);
+            const page3 = computePage3Stats(lastRecords, rt);
             const meta = {
                 date_from: snapshot?.date_from ?? document.getElementById('date_from').value,
                 date_to: snapshot?.date_to ?? document.getElementById('date_to').value,
@@ -645,20 +748,18 @@
                 saved_at: Date.now(),
                 page2_stats: page2.stats,
                 page2_filtered: page2.filteredCount,
+                page3_stats: page3,
             };
-            const payload = { ...meta, records: lastRecords.map(slimRecord) };
-            // Clear stale cache first to free quota, then try. On failure, drop
-            // records but keep page2_stats so the rankings page still works.
-            sessionStorage.removeItem(CACHE_KEY);
             try {
-                sessionStorage.setItem(CACHE_KEY, JSON.stringify(payload));
-            } catch (e) {
-                try {
-                    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...meta, records: [], cache_skipped: true }));
-                } catch (e2) { /* ignore */ }
-            }
+                sessionStorage.setItem(CACHE_KEY, JSON.stringify(meta));
+            } catch (e) { /* ignore — meta is small, this should not happen */ }
+            // Records to IDB (fire-and-forget; failures don't block /page2 or /page3)
+            idbPut(IDB_RECORDS_KEY, lastRecords.map(slimRecord)).catch(() => {});
         }
-        function clearCache() { sessionStorage.removeItem(CACHE_KEY); }
+        function clearCache() {
+            sessionStorage.removeItem(CACHE_KEY);
+            idbDelete(IDB_RECORDS_KEY).catch(() => {});
+        }
         function readCacheRaw() {
             try {
                 const raw = sessionStorage.getItem(CACHE_KEY);
@@ -666,7 +767,7 @@
                 return JSON.parse(raw);
             } catch (e) { return null; }
         }
-        function restoreCache() {
+        async function restoreCache() {
             const c = readCacheRaw();
             if (!c) return false;
             if (c.date_from) document.getElementById('date_from').value = c.date_from;
@@ -675,9 +776,14 @@
                 const radio = document.querySelector(`input[name=report_type][value="${c.report_type}"]`);
                 if (radio) radio.checked = true;
             }
-            if (!c.records || !c.records.length) return false;
-            lastRecords = c.records;
-            return true;
+            try {
+                const records = await idbGet(IDB_RECORDS_KEY);
+                if (records && records.length) {
+                    lastRecords = records;
+                    return true;
+                }
+            } catch (e) { /* ignore */ }
+            return false;
         }
 
         // Early restore of form state — before startDashClock reads it for the first tick
@@ -1349,7 +1455,7 @@
         });
 
         // ========== RESTORE CACHED DATA (after navigation back from /page2) ==========
-        if (restoreCache()) buildDashboard();
+        restoreCache().then(ok => { if (ok) buildDashboard(); });
     </script>
 </body>
 </html>
