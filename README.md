@@ -63,7 +63,7 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - **Auto Refresh** — ดึงข้อมูลใหม่ทุก 5 นาที (เช็ค Today-lock ก่อน submit) + **countdown (m:ss)** ข้างเช็คบ็อกซ์ แสดงเวลาที่เหลือจนถึง refresh ครั้งถัดไป
 - **Theme toggle** — Dark / Light (จำค่าใน localStorage)
 - **Sort dropdown + Info tooltip** — เลือกวิธีเรียง Inspector Cards + hover ปุ่ม `?` ดูสูตรและเงื่อนไขของแต่ละโหมด
-- **Mapping button** — ปุ่มไอคอนสีม่วงในแถบเครื่องมือ → ไปหน้าแก้ไข supervisor/staff mapping (`/page4`)
+- **Export + Mapping icons** — สองไอคอนใน `.toolbar-controls` (ก่อน `sortMode`) แสดงแบบไอคอนล้วน ไม่มีกรอบ/พื้นหลัง: 🟢 เขียว = Export inspector stats เป็น Excel (disabled จนกว่า fetch จะเสร็จ), 🟣 ม่วง = ไปหน้าแก้ไข supervisor/staff mapping (`/page4`) — hover เปลี่ยนแค่สีไอคอน
 - **Floating Action Buttons** — ปุ่มวงกลมมุมขวาล่าง นำทางระหว่าง `/` → `/page2` → `/page3` (page2 มีปุ่ม prev/next, page3 มีปุ่ม prev, page4 มีปุ่มกากบาท ✕ กลับหน้าแรก)
 
 ### Page 2 — Inspector Rankings Charts
