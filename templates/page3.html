@@ -209,6 +209,41 @@
             return String(s || '').replace(/^(นางสาว|น\.ส\.|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '').trim();
         }
 
+        // Business-day utility — must stay in sync with index.html.
+        let HOLIDAY_SET = new Set();
+        let HOLIDAYS_READY = null;
+        async function loadHolidays() {
+            try {
+                const res = await fetch('/api/holidays');
+                if (!res.ok) return;
+                const data = await res.json();
+                HOLIDAY_SET = new Set(data.holidays || []);
+            } catch (e) { /* fall back to weekend-only */ }
+        }
+        HOLIDAYS_READY = loadHolidays();
+        function _ymd(ts) {
+            const d = new Date(ts);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        function isBusinessDay(ts) {
+            const dow = new Date(ts).getDay();
+            if (dow === 0 || dow === 6) return false;
+            return !HOLIDAY_SET.has(_ymd(ts));
+        }
+        function businessDaysBetween(aMs, bMs) {
+            if (bMs <= aMs) return 0;
+            const DAY = 86400000;
+            const startOfDay = (t) => { const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); };
+            let cursor = startOfDay(aMs);
+            const endDay = startOfDay(bMs);
+            let count = 0;
+            while (cursor < endDay) {
+                if (isBusinessDay(cursor)) count++;
+                cursor += DAY;
+            }
+            return count;
+        }
+
         function parseDT(s) {
             if (!s) return null;
             const str = String(s).trim();
@@ -224,12 +259,6 @@
             }
             const iso = Date.parse(str);
             return isNaN(iso) ? null : iso;
-        }
-
-        function durationBucket(ms) {
-            // Any duration ≤ 24h → "1 วัน"; 24-48h → "2 วัน"; ... clamp at MAX_BUCKET+
-            const days = Math.max(1, Math.ceil(ms / DAY_MS));
-            return Math.min(days, MAX_BUCKET + 1);
         }
 
         function bucketClass(d) {
@@ -257,16 +286,17 @@
                 const completedRecs = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน');
                 const buckets = new Map();
                 let missing = 0;
-                let totalMs = 0, timedCount = 0;
+                let totalBizDays = 0, timedCount = 0;
                 completedRecs.forEach(r => {
                     const a = parseDT(r.dispatch_dt), b = parseDT(r.checker_dt);
                     if (a === null || b === null || b <= a) {
                         missing++;
                         return;
                     }
-                    const d = durationBucket(b - a);
+                    const days = businessDaysBetween(a, b);
+                    const d = Math.min(days, MAX_BUCKET + 1);
                     buckets.set(d, (buckets.get(d) || 0) + 1);
-                    totalMs += (b - a);
+                    totalBizDays += days;
                     timedCount++;
                 });
                 return {
@@ -275,7 +305,7 @@
                     completed: completedRecs.length,
                     buckets,
                     missing,
-                    avgDays: timedCount > 0 ? (totalMs / timedCount) / DAY_MS : null,
+                    avgDays: timedCount > 0 ? totalBizDays / timedCount : null,
                 };
             });
         }
@@ -374,7 +404,7 @@
             content.appendChild(grid);
         }
 
-        function syncView() {
+        async function syncView() {
             const cache = readCache();
             const savedAt = cache && cache.saved_at ? cache.saved_at : null;
             if (savedAt === lastSavedAt && currentStats.length) {
@@ -399,6 +429,9 @@
 
             const rt = cache.report_type || 'enquiry';
             if (hasRecords) {
+                // Fallback path computes business days from raw records — wait for holidays
+                // so weekend-only filtering doesn't briefly produce wrong buckets.
+                await HOLIDAYS_READY;
                 currentStats = computeStatsFromRecords(cache.records, rt);
             } else {
                 // Rehydrate pre-aggregated stats; buckets were serialized as a plain object.

@@ -370,6 +370,29 @@ def api_mapping_get():
         return jsonify(json.load(fh))
 
 
+_holidays_path = os.path.join(os.path.dirname(__file__), 'holidays_th.json')
+_holidays_lock = threading.Lock()
+
+
+@app.route('/api/holidays', methods=['GET'])
+@check_basic_auth
+def api_holidays_get():
+    if not os.path.exists(_holidays_path):
+        return jsonify({'holidays': []})
+    with _holidays_lock, open(_holidays_path, encoding='utf-8') as fh:
+        data = json.load(fh)
+    flat = []
+    for year_list in (data.get('holidays') or {}).values():
+        for item in year_list:
+            if isinstance(item, dict) and item.get('date'):
+                flat.append(item['date'])
+            elif isinstance(item, str):
+                flat.append(item)
+    resp = jsonify({'holidays': flat})
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    return resp
+
+
 @app.route('/api/mapping', methods=['POST'])
 @check_basic_auth
 def api_mapping_save():

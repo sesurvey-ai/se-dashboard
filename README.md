@@ -48,7 +48,7 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 **Sort modes** (dropdown + ปุ่ม `?` tooltip อธิบายสูตร)
 - `score` *(default)* — `completed × pct` ถ่วงน้ำหนักปริมาณ × คุณภาพ
 - `total` / `completed` / `pending` — มาก → น้อย
-- `dispatch_speed` / `report_speed` — เวลาเฉลี่ย `checker_dt − dispatch_dt` / `− sendReport_dt`, น้อย → มาก
+- `dispatch_speed` / `report_speed` — เฉลี่ย **จำนวนวันทำการ** ที่ใช้ระหว่าง `dispatch_dt → checker_dt` และ `sendReport_dt → checker_dt` (หักเสาร์-อาทิตย์ + วันหยุดราชการไทย), น้อย → มาก
 
 ### Header
 
@@ -73,17 +73,17 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
   - แถวล่าง: 📦 จำนวนเคสทั้งหมด · ✅ จบงาน · ⏳ งานค้าง
 - แท่ง top-3 ใช้ **linear gradient ทอง/เงิน/ทองแดง** (อ่อน→เข้ม ขยายเต็มความกว้างของแต่ละแท่ง ผ่าน `beforeDraw` plugin) — สั้นหรือยาวก็ไล่สีเท่ากัน; ที่เหลือเป็นเทาโปร่งแสง
 - กราฟ `score` แสดง 🥇🥈🥉 แทนตัวเลข + ซ่อน tick แกน X (เน้นที่อันดับ ไม่ใช่ค่า)
-- กราฟ speed ทั้ง 2 แสดงผลเป็น **จำนวนวัน** (`<1 วัน` ทศนิยม 2 ตำแหน่ง, `≥10 วัน` ปัดเต็ม)
+- กราฟ speed ทั้ง 2 แสดงผลเป็น **จำนวนวันทำการ** (หักเสาร์-อาทิตย์ + วันหยุดราชการไทย; `<1 วัน` ทศนิยม 2 ตำแหน่ง, `≥10 วัน` ปัดเต็ม)
 - Responsive grid: 3 cols → 2 cols (≤1100px) → 1 col (≤720px) พร้อม `clamp()` font sizing
 - Auto-sync เมื่อข้อมูลหน้า 1 เปลี่ยน (`pageshow` event + เทียบ `saved_at` timestamp)
 
 ### Page 3 — Inspection Duration Buckets
 
-- **การ์ดผู้ตรวจสอบ** แสดง breakdown เคส "จบงาน" ตามระยะเวลา `dispatch_dt → checker_dt`
-  - Bucket: `≤24h = 1 วัน`, `24-48h = 2 วัน`, ... คลัมป์ที่ `7+ วัน`
-  - แต่ละ bucket มีแถบสัดส่วน + จำนวนเคส (เรียง 1 วัน → มากสุดลงไป)
-  - สีแถบไล่โทน: เขียว (1d) → เหลือง (2d) → ส้ม (3-4d) → แดง (7+d)
-- **Footer** แต่ละการ์ด: เฉลี่ยรวม (วัน) + จำนวนเคสจบงานที่ไม่มี `dispatch_dt`/`checker_dt`
+- **การ์ดผู้ตรวจสอบ** แสดง breakdown เคส "จบงาน" ตาม **จำนวนวันทำการ** ระหว่าง `dispatch_dt → checker_dt` (หักเสาร์-อาทิตย์ + วันหยุดราชการไทย)
+  - Bucket: `0 วัน` (ภายในวันเดียวกัน), `1 วัน`, `2 วัน`, ... คลัมป์ที่ `7+ วัน`
+  - แต่ละ bucket มีแถบสัดส่วน + จำนวนเคส (เรียงน้อย → มากลงไป)
+  - สีแถบไล่โทน: เขียว (0-1d) → เหลือง (2d) → ส้ม (3-4d) → แดง (7+d)
+- **Footer** แต่ละการ์ด: เฉลี่ยรวม (วันทำการ) + จำนวนเคสจบงานที่ไม่มี `dispatch_dt`/`checker_dt`
 - **Sort modes**: จำนวนจบงาน (default) / เร็วเฉลี่ย / ช้าเฉลี่ย / ชื่อ — top 3 ติดเหรียญ (ยกเว้นโหมด "ชื่อ")
 - **Pre-aggregated buckets** — หน้า 1 คำนวณ `page3_stats` ต่อ inspector (รวม buckets/missing/avgDays) ตั้งแต่ตอน fetch แล้วเก็บใน sessionStorage → /page3 rehydrate Map จาก plain object โดยไม่ต้องอ่าน records ดิบ ทำงานได้แม้ range ใหญ่
 
@@ -94,6 +94,18 @@ Dashboard สรุปรายงานเซอร์เวย์ (Survey Repo
 - **บันทึก / โหลดใหม่** — REST endpoints `/api/mapping` (GET/POST) อ่าน/เขียนไฟล์ `mapping_supervisor_staff_.json` พร้อม `threading.Lock` กัน concurrent write + ทริกเกอร์ reload `STAFF_SUPERVISOR_MAP` ทันทีไม่ต้อง restart
 - **UX protections** — ปุ่มบันทึก disabled เมื่อไม่มีการแก้ไข, เตือนก่อนปิดหน้าเมื่อยังไม่ save, ยืนยันก่อนลบคอลัมน์ที่มีข้อมูล, `beforeunload` warning
 - **Keyboard shortcut**: `Cmd/Ctrl + S` → บันทึก
+
+### Business-day calculation (Thai holidays)
+
+- **Holidays file** — `holidays_th.json` เก็บวันหยุดราชการไทยรายปี (2024-2027) format `{year: [{date, name}, ...]}` — แก้ไฟล์เพื่อเพิ่มปีถัดไปหรือวันหยุดพิเศษได้โดยไม่ต้องแก้ code
+- **Endpoint** `/api/holidays` — flatten เป็น array `["YYYY-MM-DD", ...]` ส่งให้ frontend (cache 1 ชม.)
+- **`businessDaysBetween(a, b)`** — นับจำนวนวันทำการในช่วง `[startOfDay(a), startOfDay(b))` **exclusive ของวันสิ้นสุด** — ข้ามวันเสาร์/อาทิตย์ + วันที่อยู่ใน `HOLIDAY_SET`
+  - จ่ายงานและตรวจวันเดียวกัน = `0 วัน`
+  - จันทร์ → อังคาร = `1 วัน`
+  - เสาร์ (จ่าย) → จันทร์ (ตรวจ) = `0 วัน` (เสาร์-อาทิตย์ไม่นับ; จันทร์เป็นวันสิ้นสุดไม่นับ)
+  - 3 เม.ย. ศุกร์ → 29 เม.ย. พุธ = `14 วัน` (ข้ามวันจักรี 6 เม.ย. + สงกรานต์ 13-15 เม.ย. + ทุกเสาร์-อาทิตย์)
+- **Source of truth ที่เดียว** — index.html คำนวณ `page2_stats` + `page3_stats` ตอน fetch แล้วเก็บใน sessionStorage; page2/page3 ใช้ค่าเดียวกัน + มี fallback คำนวณจาก records ดิบ (await `HOLIDAYS_READY` ก่อนคำนวณเสมอ)
+- **`STATS_VERSION`** — bump เลขทุกครั้งที่สูตรเปลี่ยน → cache เก่าใน sessionStorage ถูก invalidate อัตโนมัติเมื่อ user เปิดหน้าใหม่
 
 ### Light / Dark Theme
 
@@ -127,6 +139,7 @@ Benchmark IDB roundtrip ที่ 200k records (fake-indexeddb): put 132ms · ge
 se-dashboard/
 ├── app.py                          # Flask backend + iSurvey client + SSE streaming
 ├── mapping_supervisor_staff_.json  # Supervisor → Staff mapping (reverse lookup)
+├── holidays_th.json                # Thai public holidays per year (drives business-day calc)
 ├── templates/
 │   ├── index.html                  # Frontend (Dashboard UI + session cache)
 │   ├── page2.html                  # Inspector Rankings — 6 bar charts per report
@@ -169,6 +182,7 @@ python app.py
 | `/page4`        | GET    | Supervisor/Staff mapping editor                  |
 | `/api/mapping`  | GET    | คืนค่า `mapping_supervisor_staff_.json` ทั้งไฟล์ (JSON) |
 | `/api/mapping`  | POST   | บันทึก mapping ใหม่ (JSON body) + reload in-memory map |
+| `/api/holidays` | GET    | คืน list วันหยุดไทยจาก `holidays_th.json` flatten เป็น `["YYYY-MM-DD", ...]` (cache 1 ชม.) |
 | `/fetch-stream` | POST   | SSE streaming fetch (pagination + progress)      |
 | `/fetch`        | POST   | Non-streaming fetch (single response)            |
 

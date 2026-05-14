@@ -181,7 +181,7 @@
             meta.innerHTML = '';
         }
 
-        function syncView() {
+        async function syncView() {
             const cache = readCache();
             const savedAt = cache && cache.saved_at ? cache.saved_at : null;
             // Skip re-render if cache unchanged and charts are still on screen
@@ -199,6 +199,9 @@
                     </div>`;
                 return;
             }
+            // Fallback path computes business days from raw records — wait for holidays first
+            // so weekend-only filtering doesn't briefly show wrong numbers.
+            if (!hasPreStats) await HOLIDAYS_READY;
             renderCharts(cache);
         }
 
@@ -207,6 +210,41 @@
         window.addEventListener('pageshow', syncView);
 
         // ========== HELPERS (mirror index.html logic) ==========
+        // Business-day utility — must stay in sync with index.html.
+        let HOLIDAY_SET = new Set();
+        let HOLIDAYS_READY = null;
+        async function loadHolidays() {
+            try {
+                const res = await fetch('/api/holidays');
+                if (!res.ok) return;
+                const data = await res.json();
+                HOLIDAY_SET = new Set(data.holidays || []);
+            } catch (e) { /* fall back to weekend-only */ }
+        }
+        HOLIDAYS_READY = loadHolidays();
+        function _ymd(ts) {
+            const d = new Date(ts);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        function isBusinessDay(ts) {
+            const dow = new Date(ts).getDay();
+            if (dow === 0 || dow === 6) return false;
+            return !HOLIDAY_SET.has(_ymd(ts));
+        }
+        function businessDaysBetween(aMs, bMs) {
+            if (bMs <= aMs) return 0;
+            const DAY = 86400000;
+            const startOfDay = (t) => { const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); };
+            let cursor = startOfDay(aMs);
+            const endDay = startOfDay(bMs);
+            let count = 0;
+            while (cursor < endDay) {
+                if (isBusinessDay(cursor)) count++;
+                cursor += DAY;
+            }
+            return count;
+        }
+
         function stripTitle(s) {
             return String(s || '').replace(/^(นางสาว|น\.ส\.|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '').trim();
         }
@@ -228,17 +266,17 @@
             return isNaN(iso) ? null : iso;
         }
 
-        function avgDurationMin(recs, startKey, endKey) {
+        function avgBizDays(recs, startKey, endKey) {
             let total = 0, count = 0;
             recs.forEach(r => {
                 const a = parseDT(r[startKey]);
                 const b = parseDT(r[endKey]);
                 if (a !== null && b !== null && b > a) {
-                    total += (b - a);
+                    total += businessDaysBetween(a, b);
                     count++;
                 }
             });
-            return count > 0 ? (total / count) / 60000 : null;
+            return count > 0 ? total / count : null;
         }
 
         function fmtThDate(s) {
@@ -294,8 +332,8 @@
                         pending: total - completed,
                         pct,
                         score: completed * pct,
-                        dispatchSpeed: avgDurationMin(recs, 'dispatch_dt', 'checker_dt'),
-                        reportSpeed: avgDurationMin(recs, 'sendReport_dt', 'checker_dt'),
+                        dispatchSpeed: avgBizDays(recs, 'dispatch_dt', 'checker_dt'),
+                        reportSpeed: avgBizDays(recs, 'sendReport_dt', 'checker_dt'),
                     };
                 });
                 filteredCount = filtered.length;
@@ -325,11 +363,7 @@
 
             chartDefs.forEach(def => {
                 // Filter out null/Infinity values for speed charts (no data = excluded)
-                let data = stats.map(s => {
-                    const raw = s[def.key];
-                    const value = def.unit === 'days' && raw !== null && isFinite(raw) ? raw / 1440 : raw;
-                    return { name: s.name, value };
-                });
+                let data = stats.map(s => ({ name: s.name, value: s[def.key] }));
                 if (def.unit === 'days') {
                     data = data.filter(d => d.value !== null && isFinite(d.value));
                 }

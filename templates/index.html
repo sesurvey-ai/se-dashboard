@@ -567,6 +567,49 @@
 
         let lastRecords = null;
 
+        // ========== BUSINESS-DAY UTILITY (skip weekends + Thai public holidays) ==========
+        // Bumped whenever the day-calculation formula changes so /page2 and /page3 can
+        // detect stale pre-aggregated stats and recompute from records.
+        const STATS_VERSION = 3;
+        let HOLIDAY_SET = new Set();
+        let HOLIDAYS_READY = null;
+        async function loadHolidays() {
+            try {
+                const res = await fetch('/api/holidays');
+                if (!res.ok) return;
+                const data = await res.json();
+                HOLIDAY_SET = new Set(data.holidays || []);
+            } catch (e) { /* fall back to weekend-only */ }
+        }
+        HOLIDAYS_READY = loadHolidays();
+        function _ymd(ts) {
+            const d = new Date(ts);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+        }
+        function isBusinessDay(ts) {
+            const dow = new Date(ts).getDay(); // 0=Sun, 6=Sat
+            if (dow === 0 || dow === 6) return false;
+            return !HOLIDAY_SET.has(_ymd(ts));
+        }
+        // Count business days in [startOfDay(a), startOfDay(b)) — exclusive of end day.
+        // Same business day = 0, next business day = 1, weekends/holidays skipped.
+        function businessDaysBetween(aMs, bMs) {
+            if (bMs <= aMs) return 0;
+            const DAY = 86400000;
+            const startOfDay = (t) => { const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); };
+            let cursor = startOfDay(aMs);
+            const endDay = startOfDay(bMs);
+            let count = 0;
+            while (cursor < endDay) {
+                if (isBusinessDay(cursor)) count++;
+                cursor += DAY;
+            }
+            return count;
+        }
+
         // ========== SESSION CACHE (survive navigation to /page2 and back) ==========
         const CACHE_KEY = 'se_cache';
         // Only fields actually read by buildDashboard() + page2 charts — records arrive with ~49 fields,
@@ -606,13 +649,18 @@
                 const iso = Date.parse(str);
                 return isNaN(iso) ? null : iso;
             };
-            const avgMin = (recs, a, b) => {
+            // Average business days per record (skips Sat/Sun + Thai holidays).
+            // Returns days directly — page2 chart no longer divides by 1440.
+            const avgBizDays = (recs, a, b) => {
                 let total = 0, count = 0;
                 recs.forEach(r => {
                     const ta = parseT(r[a]), tb = parseT(r[b]);
-                    if (ta !== null && tb !== null && tb > ta) { total += tb - ta; count++; }
+                    if (ta !== null && tb !== null && tb > ta) {
+                        total += businessDaysBetween(ta, tb);
+                        count++;
+                    }
                 });
-                return count > 0 ? (total / count) / 60000 : null;
+                return count > 0 ? total / count : null;
             };
             const filtered = records.filter(r => String(r.stt_desc || '').trim() !== 'ยกเลิกเคลม');
             const groups = {};
@@ -628,8 +676,8 @@
                 return {
                     name, total, completed, pending: total - completed, pct,
                     score: completed * pct,
-                    dispatchSpeed: avgMin(recs, 'dispatch_dt', 'checker_dt'),
-                    reportSpeed: avgMin(recs, 'sendReport_dt', 'checker_dt'),
+                    dispatchSpeed: avgBizDays(recs, 'dispatch_dt', 'checker_dt'),
+                    reportSpeed: avgBizDays(recs, 'sendReport_dt', 'checker_dt'),
                 };
             });
             return { stats, filteredCount: filtered.length };
@@ -669,14 +717,14 @@
             return Object.entries(groups).map(([name, recs]) => {
                 const completedRecs = recs.filter(r => String(r.stt_desc || '').trim() === 'จบงาน');
                 const buckets = {};
-                let missing = 0, totalMs = 0, timedCount = 0;
+                let missing = 0, totalBizDays = 0, timedCount = 0;
                 completedRecs.forEach(r => {
                     const a = parseT(r.dispatch_dt), b = parseT(r.checker_dt);
                     if (a === null || b === null || b <= a) { missing++; return; }
-                    const days = Math.max(1, Math.ceil((b - a) / DAY_MS));
+                    const days = businessDaysBetween(a, b);
                     const d = Math.min(days, MAX_BUCKET + 1);
                     buckets[d] = (buckets[d] || 0) + 1;
-                    totalMs += (b - a);
+                    totalBizDays += days;
                     timedCount++;
                 });
                 return {
@@ -685,7 +733,7 @@
                     completed: completedRecs.length,
                     buckets,
                     missing,
-                    avgDays: timedCount > 0 ? (totalMs / timedCount) / DAY_MS : null,
+                    avgDays: timedCount > 0 ? totalBizDays / timedCount : null,
                 };
             });
         }
@@ -736,8 +784,9 @@
             } finally { db.close(); }
         }
 
-        function saveCache(snapshot) {
+        async function saveCache(snapshot) {
             if (!lastRecords) return;
+            await HOLIDAYS_READY;
             const rt = snapshot?.report_type ?? document.querySelector('input[name=report_type]:checked').value;
             const page2 = computePage2Stats(lastRecords, rt);
             const page3 = computePage3Stats(lastRecords, rt);
@@ -746,6 +795,7 @@
                 date_to: snapshot?.date_to ?? document.getElementById('date_to').value,
                 report_type: rt,
                 saved_at: Date.now(),
+                stats_version: STATS_VERSION,
                 page2_stats: page2.stats,
                 page2_filtered: page2.filteredCount,
                 page3_stats: page3,
@@ -1116,7 +1166,7 @@
                     const a = parseDT(r[startKey]);
                     const b = parseDT(r[endKey]);
                     if (a !== null && b !== null && b > a) {
-                        total += (b - a);
+                        total += businessDaysBetween(a, b);
                         count++;
                     }
                 });
@@ -1434,7 +1484,8 @@
                                 const records = deduplicateRecords(accumulated);
                                 fillSupervisor(records);
                                 lastRecords = records;
-                                saveCache(submittedSnapshot);
+                                await HOLIDAYS_READY;
+                                await saveCache(submittedSnapshot);
                                 buildDashboard();
                             }
                         }
@@ -1455,7 +1506,11 @@
         });
 
         // ========== RESTORE CACHED DATA (after navigation back from /page2) ==========
-        restoreCache().then(ok => { if (ok) buildDashboard(); });
+        (async () => {
+            await HOLIDAYS_READY;
+            const ok = await restoreCache();
+            if (ok) buildDashboard();
+        })();
     </script>
 </body>
 </html>
